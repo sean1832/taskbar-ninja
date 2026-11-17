@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
 project(taskbar_ninja LANGUAGES CXX)
 
+if(NOT MSVC)
+    message(FATAL_ERROR "compiler must be MSVC (CLion: Visual Studio toolchain)")
+endif()
+
 set(CMAKE_CXX_STANDARD 20) # C++20
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -24,10 +28,4 @@ target_compile_definitions(taskbar-ninja PRIVATE
 
 target_link_libraries(taskbar-ninja PRIVATE user32 shell32)
 
-if (MSVC)
-    target_compile_options(taskbar-ninja PRIVATE /W4 /WX /permissive- /utf-8)
-else()
-    # -municode: lets MinGW find wWinMain
-    target_compile_options(taskbar-ninja PRIVATE -Wall -Wextra -Werror -municode)
-    target_link_options(taskbar-ninja PRIVATE -municode -static)
-endif()
+target_compile_options(taskbar-ninja PRIVATE /W4 /WX /permissive- /utf-8)
