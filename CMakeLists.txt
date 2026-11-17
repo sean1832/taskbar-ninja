@@ -10,15 +10,16 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 # WIN32 = no console window
 add_executable(taskbar-ninja WIN32
-    src/main.cpp
+        src/main.cpp
+        src/exit_code.h
 )
 
 target_compile_definitions(taskbar-ninja PRIVATE
-    UNICODE # W version of Win32 calls
-    _UNICODE
-    WIN32_LEAN_AND_MEAN # exclude rarely-used stuff from Windows headers (smaller windows.h)
-    NOMINMAX # prevent windows.h from defining min/max macros (conflicts with std::min/max)
-    _WIN32_WINNT=0x0A00 # Windows 10+ API
+        UNICODE # W version of Win32 calls
+        _UNICODE
+        WIN32_LEAN_AND_MEAN # exclude rarely-used stuff from Windows headers (smaller windows.h)
+        NOMINMAX # prevent windows.h from defining min/max macros (conflicts with std::min/max)
+        _WIN32_WINNT=0x0A00 # Windows 10+ API
 )
 
 target_link_libraries(taskbar-ninja PRIVATE user32 shell32)
