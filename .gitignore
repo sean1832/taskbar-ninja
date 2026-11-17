@@ -1,6 +1,8 @@
 # custom ignore
 tmp/
 
+plan.md
+
 # Created by https://www.toptal.com/developers/gitignore/api/c++,windows,jetbrains,clion,cmake
 # Edit at https://www.toptal.com/developers/gitignore?templates=c++,windows,jetbrains,clion,cmake
 
