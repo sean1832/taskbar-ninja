@@ -6,6 +6,7 @@
 
 #include "exit_code.h"
 #include "log.h"
+#include "taskbar.h"
 
 namespace {
     using ninja::ExitCode;
@@ -24,6 +25,7 @@ namespace {
         if (mode == L"--restore" && argument_count == 2) {
             ninja::set_log_role(L"restore");
             ninja::append_log(L"event=start");
+            ninja::restore_taskbar_and_log(L"command");
             // TODO: restore every taskbar, close the running app
             return ExitCode::success;
         }

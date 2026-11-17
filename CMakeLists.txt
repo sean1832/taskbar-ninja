@@ -18,6 +18,8 @@ add_executable(taskbar-ninja WIN32
         src/exit_code.h
         src/log.h
         src/log.cpp
+        src/taskbar.cpp
+        src/taskbar.h
 )
 
 target_compile_definitions(taskbar-ninja PRIVATE
