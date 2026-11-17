@@ -16,6 +16,8 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 add_executable(taskbar-ninja WIN32
         src/main.cpp
         src/exit_code.h
+        src/log.h
+        src/log.cpp
 )
 
 target_compile_definitions(taskbar-ninja PRIVATE
