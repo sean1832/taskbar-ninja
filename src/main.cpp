@@ -44,8 +44,8 @@ namespace {
             return ExitCode::success;
         }
 
-        if (mode == L"--logs" && argument_count == 2) {
-            ninja::set_log_role(L"show_logs");
+        if (mode == L"--configs" && argument_count == 2) {
+            ninja::set_log_role(L"show_configs");
             ninja::append_log(LogLevel::info, L"start");
             std::wstring appdata_folder = ninja::app_data_folder();
             // open folder in explorer
