@@ -169,6 +169,12 @@ namespace ninja {
             case tray_message:
                 on_tray_activated(*state, lparam);
                 return 0;
+            case WM_ENDSESSION:
+                // wparam TRUE = sign-out or shutdown goes ahead; the process can end any time after this
+                if (wparam != FALSE) {
+                    restore_taskbar_and_log(L"session_end");
+                }
+                return 0;
             case WM_CLOSE:
                 exit_app(window);
                 return 0;
