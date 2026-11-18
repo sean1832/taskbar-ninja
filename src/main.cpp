@@ -43,6 +43,26 @@ namespace {
             return ExitCode::success;
         }
 
+        if (mode == L"--logs" && argument_count == 2) {
+            ninja::set_log_role(L"show_logs");
+            ninja::append_log(ninja::LogLevel::info, L"start");
+            std::wstring appdata_folder = ninja::app_data_folder();
+            // open folder in explorer
+            HINSTANCE result = ShellExecuteW(
+                nullptr,                // Parent window handle
+                L"open",                // Operation to perform
+                appdata_folder.c_str(), // Path to the folder
+                nullptr,                // Parameters (not needed for folders)
+                nullptr,                // Default working directory
+                SW_SHOWNORMAL           // Show window normally
+            );
+            if (reinterpret_cast<INT_PTR>(result) <= 32) {
+                ninja::append_log(ninja::LogLevel::error, L"invalid_filepath", {{L"win32_error", std::to_wstring(GetLastError())}});
+                return ExitCode::invalid_filepath;
+            }
+            return ExitCode::success;
+        }
+
         if (mode == L"--watchdog" && argument_count == 3) {
             ninja::set_log_role(L"watchdog");
             wchar_t* end = nullptr;

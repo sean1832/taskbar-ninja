@@ -11,5 +11,6 @@ namespace ninja {
         already_running = 2,    ///< another app holds the single instance mutex
         arguments_rejected = 3, ///< command line not known
         killed_by_watchdog = 4, ///< app frozen or not closing, ended by the watchdog
+        invalid_filepath = 5,   ///< failed to open a specific path
     };
 }
