@@ -191,7 +191,7 @@ namespace ninja {
         bool hotkey_registered = RegisterHotKey(nullptr, restore_hotkey_id, restore_hotkey_modifiers, restore_hotkey_key);
         if (!hotkey_registered) {
             append_log(LogLevel::warning, L"hotkey_rejected", {
-            {L"hotkey", L"Ctrl + Alt + Shift + T"},
+            {L"hotkey", L"Ctrl+Alt+Shift+T"},
             {L"win32_error", std::to_wstring(GetLastError())},
             });
         }
