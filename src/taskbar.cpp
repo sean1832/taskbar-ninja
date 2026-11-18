@@ -29,10 +29,32 @@ namespace ninja {
             }
             return restored_count;
         }
+
+        HWND find_taskbar_of_class(const wchar_t* class_name, HMONITOR monitor) {
+            HWND taskbar = FindWindowExW(nullptr, nullptr, class_name, nullptr);
+            while (taskbar != nullptr) {
+                // nearest: a taskbar partly off-screen still counts
+                if (MonitorFromWindow(taskbar, MONITOR_DEFAULTTONEAREST) == monitor) {
+                    return taskbar;
+                }
+                taskbar = FindWindowExW(nullptr, taskbar, class_name, nullptr);
+            }
+            return nullptr;
+        }
     } // namespace
 
     HWND find_primary_taskbar() {
         return FindWindowW(taskbar_classes[0], nullptr);
+    }
+
+    HWND find_taskbar(HMONITOR monitor) {
+        for (const wchar_t* class_name : taskbar_classes) {
+            HWND taskbar = find_taskbar_of_class(class_name, monitor);
+            if (taskbar != nullptr) {
+                return taskbar;
+            }
+        }
+        return nullptr;
     }
 
     bool hide_taskbar(HWND taskbar) {

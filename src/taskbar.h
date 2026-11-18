@@ -12,6 +12,13 @@ namespace ninja {
     [[nodiscard]] HWND find_primary_taskbar();
 
     /**
+     * Finds the taskbar on one monitor.
+     * @param monitor monitor handle
+     * @return taskbar window, or nullptr when the monitor has no taskbar
+     */
+    [[nodiscard]] HWND find_taskbar(HMONITOR monitor);
+
+    /**
      * Makes a taskbar invisible and click-through.
      * @param taskbar taskbar window
      * @return false when Windows rejects the alpha change

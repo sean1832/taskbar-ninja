@@ -7,6 +7,7 @@
 
 #include "exit_code.h"
 #include "log.h"
+#include "monitor.h"
 #include "taskbar.h"
 #include "tray.h"
 #include "watchdog.h"
@@ -240,6 +241,7 @@ namespace ninja {
         }
 
         restore_taskbar_and_log(L"start");
+        log_monitor_list(build_monitor_list());
 
         AppState state;
         state.taskbar_created_message = RegisterWindowMessageW(L"TaskbarCreated");
