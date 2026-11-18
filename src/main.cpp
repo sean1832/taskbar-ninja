@@ -45,7 +45,7 @@ namespace {
         }
 
         if (mode == L"--configs" && argument_count == 2) {
-            ninja::set_log_role(L"show_configs");
+            ninja::set_log_role(L"configs");
             ninja::append_log(LogLevel::info, L"start");
             std::wstring folder = ninja::app_data_folder();
             if (folder.empty()) {
