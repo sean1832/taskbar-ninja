@@ -60,7 +60,7 @@ namespace ninja {
         void on_tray_activated(AppState& state, LPARAM lparam) {
             // old tray protocol: lParam is the mouse message
             UINT mouse_message = static_cast<UINT>(lparam);
-            bool is_click = mouse_message == WM_LBUTTONDOWN || mouse_message == WM_RBUTTONUP;
+            bool is_click = mouse_message == WM_LBUTTONUP || mouse_message == WM_RBUTTONUP;
             if (!is_click) {
                 return;
             }
