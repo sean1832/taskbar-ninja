@@ -87,10 +87,9 @@ namespace ninja {
 
     void restore_taskbar_and_log(std::wstring_view reason) {
         int restored_count = restore_taskbar();
-        std::wstring fields = L"event=restore reason=";
-        fields += reason;
-        fields += L" restored_count=";
-        fields += std::to_wstring(restored_count);
-        append_log(fields);
+        append_log(LogLevel::info, L"restore", {
+            {L"reason", static_cast<std::wstring>(reason)},
+            {L"restored_count", std::to_wstring(restored_count)},
+        });
     }
 } // namespace ninja

@@ -27,27 +27,27 @@ namespace ninja {
         void hide_primary_taskbar(AppState& state) {
             HWND taskbar = find_primary_taskbar();
             if (taskbar == nullptr) {
-                append_log(L"event=hide_skipped message=\"explorer must be running\"");
+                append_log(LogLevel::warning, L"hide_skipped", {{L"message", L"explorer must be running"}});
                 return;
             }
 
             if (!hide_taskbar(taskbar)) {
-                append_log(L"event=hide_rejected win32_error=" + std::to_wstring(GetLastError()));
+                append_log(LogLevel::error, L"hide_rejected", {{L"win32_error", std::to_wstring(GetLastError())}});
                 return;
             }
             state.taskbar_hidden = true;
-            append_log(L"event=hide");
+            append_log(LogLevel::info, L"hide");
         }
 
         void show_primary_taskbar(AppState& state) {
             HWND taskbar = find_primary_taskbar();
             if (taskbar == nullptr) {
-                append_log(L"event=show_skipped message=\"explorer must be running\"");
+                append_log(LogLevel::warning, L"show_skipped", {{L"message", L"explorer must be running"}});
                 return;
             }
             show_taskbar(taskbar);
             state.taskbar_hidden = false;
-            append_log(L"event=show");
+            append_log(LogLevel::info, L"show");
         }
 
         void exit_app(HWND window) {
@@ -132,11 +132,14 @@ namespace ninja {
         // Windows frees the mutex when the process ends, including crashes
         HANDLE mutex = CreateMutexW(nullptr, FALSE, single_instance_mutex_name);
         if (mutex == nullptr) {
-            append_log(L"event=startup_failed step=mutex win32_error=" + std::to_wstring(GetLastError()));
+            append_log(LogLevel::error, L"startup_failed", {
+                {L"step", L"mutex"},
+                {L"win32_error", std::to_wstring(GetLastError())}
+            });
             return ExitCode::startup_failed;
         }
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            append_log(L"event=already_running");
+            append_log(LogLevel::warning, L"already_running");
             CloseHandle(mutex);
             return ExitCode::already_running;
         }
@@ -146,13 +149,16 @@ namespace ninja {
         AppState state;
         HWND window = create_app_window(instance, state);
         if (window == nullptr) {
-            append_log(L"event=startup_failed step=window win32_error=" + std::to_wstring(GetLastError()));
+            append_log(LogLevel::error, L"startup_failed", {
+                {L"step", L"window"},
+                {L"win32_error", std::to_wstring(GetLastError())}
+            });
             CloseHandle(mutex);
             return ExitCode::startup_failed;
         }
 
         if (!add_tray_icon(window, L"Taskbar Ninja")) {
-            append_log(L"event=tray_icon_rejected");
+            append_log(LogLevel::warning, L"tray_icon_rejected");
         }
 
         // > 0: GetMessageW returns -1 on error an d0 on WM_QUIT
@@ -162,7 +168,7 @@ namespace ninja {
             DispatchMessageW(&message);
         }
 
-        append_log(L"event=exit");
+        append_log(LogLevel::info, L"exit");
         CloseHandle(mutex);
         return ExitCode::success;
     }
