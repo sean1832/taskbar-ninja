@@ -2,6 +2,7 @@
 
 #include <windows.h>
 
+#include <cwchar>
 #include <string>
 
 #include "exit_code.h"
@@ -24,6 +25,8 @@ namespace ninja {
             bool taskbar_hidden = false;
             HANDLE watchdog_process = nullptr;
             int watchdog_restart_count = 0;
+            // Explorer broadcasts it after a restart; 0 = not registered
+            UINT taskbar_created_message = 0;
         };
 
         AppState* app_state_of(HWND window) {
@@ -97,6 +100,21 @@ namespace ninja {
             return true;
         }
 
+        // Explorer restarted: empty tray, new visible taskbar
+        void on_taskbar_created(AppState& state) {
+            append_log(LogLevel::info, L"taskbar_created");
+            if (!add_tray_icon(state.window, L"Taskbar Ninja")) {
+                append_log(LogLevel::warning, L"tray_icon_rejected");
+            }
+            if (!state.taskbar_hidden) {
+                return;
+            }
+
+            // the new taskbar is visible; hide sets this back to true on success
+            state.taskbar_hidden = false;
+            hide_primary_taskbar();
+        }
+
         void on_tray_activated(AppState& state, LPARAM lparam) {
             // old tray protocol: lParam is the mouse message
             UINT mouse_message = static_cast<UINT>(lparam);
@@ -137,6 +155,13 @@ namespace ninja {
                 return DefWindowProcW(window, message, wparam, lparam);
             }
 
+            // registered at run time, not a switch case
+            bool is_taskbar_created = state->taskbar_created_message != 0 && message == state->taskbar_created_message;
+            if (is_taskbar_created) {
+                on_taskbar_created(*state);
+                return 0;
+            }
+
             switch (message) {
             case tray_message:
                 on_tray_activated(*state, lparam);
@@ -150,6 +175,22 @@ namespace ninja {
             default:
                 return DefWindowProcW(window, message, wparam, lparam);
             }
+        }
+
+        // last chance before windows ends a crashed app
+        LONG WINAPI on_unhandled_exception(EXCEPTION_POINTERS* exception) {
+            // restore first: allocates nothing, so it works with a broken heap
+            int restored_count = restore_taskbar();
+
+            wchar_t exception_code_text[16];
+            std::swprintf(exception_code_text, 16, L"0x%08lX", exception->ExceptionRecord->ExceptionCode);
+            append_log(LogLevel::critical, L"crash", {
+                {L"exception_code", exception_code_text},
+                {L"restored_count", std::to_wstring(restored_count)}
+            });
+
+            // windows ends the process and writes its crash report
+            return EXCEPTION_CONTINUE_SEARCH;
         }
 
         HWND create_app_window(HINSTANCE instance, AppState& state) {
@@ -169,6 +210,11 @@ namespace ninja {
     } // namespace
 
     ExitCode run_app(HINSTANCE instance) {
+        // stack kept free for on_unhandled_exception after a stack overflow
+        ULONG crash_stack_bytes = 32 * 1024;
+        SetThreadStackGuarantee(&crash_stack_bytes);
+        SetUnhandledExceptionFilter(on_unhandled_exception);
+
         // Windows frees the mutex when the process ends, including crashes
         HANDLE mutex = CreateMutexW(nullptr, FALSE, single_instance_mutex_name);
         if (mutex == nullptr) {
@@ -187,6 +233,11 @@ namespace ninja {
         restore_taskbar_and_log(L"start");
 
         AppState state;
+        state.taskbar_created_message = RegisterWindowMessageW(L"TaskbarCreated");
+        if (state.taskbar_created_message == 0) {
+            append_log(LogLevel::warning, L"taskbar_created_rejected", {{L"win32_error", std::to_wstring(GetLastError())}});
+        }
+
         HWND window = create_app_window(instance, state);
         if (window == nullptr) {
             append_log(LogLevel::error, L"startup_failed", {
