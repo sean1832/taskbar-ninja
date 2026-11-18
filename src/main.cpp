@@ -8,6 +8,7 @@
 #include "exit_code.h"
 #include "log.h"
 #include "taskbar.h"
+#include "watchdog.h"
 
 namespace {
     using ninja::ExitCode;
@@ -49,8 +50,7 @@ namespace {
                 return ExitCode::arguments_rejected;
             }
             ninja::append_log(ninja::LogLevel::info, L"start");
-            // TODO: return ninja::run_watchdog(app_process_id)
-            return ExitCode::success;
+            return ninja::run_watchdog(app_process_id);
         }
         ninja::append_log(ninja::LogLevel::error, L"arguments_rejected", {
             {L"message", L"arguments must be empty, --restore or --watchdog <process id>"},

@@ -24,6 +24,8 @@ add_executable(taskbar-ninja WIN32
         src/tray.h
         src/app.cpp
         src/app.h
+        src/watchdog.cpp
+        src/watchdog.h
 )
 
 target_compile_definitions(taskbar-ninja PRIVATE

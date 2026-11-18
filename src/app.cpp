@@ -8,16 +8,22 @@
 #include "log.h"
 #include "taskbar.h"
 #include "tray.h"
+#include "watchdog.h"
 
 namespace ninja {
     namespace {
         // Local\ = one per signed-in user session
         constexpr wchar_t single_instance_mutex_name[] = L"Local\\taskbar-ninja";
 
+        // stops a watchdog that dies at once from restarting forever
+        constexpr int max_watchdog_restart = 10;
+
         /// State of the running main app. Lives on the stack of run_app; the window holds a pointer to it.
         struct AppState {
             HWND window = nullptr;
             bool taskbar_hidden = false;
+            HANDLE watchdog_process = nullptr;
+            int watchdog_restart_count = 0;
         };
 
         AppState* app_state_of(HWND window) {
@@ -55,6 +61,39 @@ namespace ninja {
             remove_tray_icon(window);
             // WM_DESTROY follows, which ends the message loop
             DestroyWindow(window);
+        }
+
+
+        void on_watchdog_ended(AppState& state) {
+            DWORD exit_code = 0;
+            GetExitCodeProcess(state.watchdog_process, &exit_code);
+            CloseHandle(state.watchdog_process);
+            state.watchdog_process = nullptr;
+            append_log(LogLevel::warning, L"watchdog_ended", {
+                {L"exit_code", std::to_wstring(exit_code)},
+                {L"restart_count", std::to_wstring(state.watchdog_restart_count)}
+            });
+
+            if (state.watchdog_restart_count >= max_watchdog_restart) {
+                append_log(LogLevel::error, L"watchdog_restart_limit", {
+                    {L"max_restarts", std::to_wstring(max_watchdog_restart)}
+                });
+            }
+            state.watchdog_restart_count += 1;
+            state.watchdog_process = start_watchdog();
+        }
+
+        // runs every queued message; false on WM_QUIT
+        bool pump_messages() {
+            MSG message = {};
+            while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+                if (message.message == WM_QUIT) {
+                    return false;
+                }
+                TranslateMessage(&message);
+                DispatchMessageW(&message);
+            }
+            return true;
         }
 
         void on_tray_activated(AppState& state, LPARAM lparam) {
@@ -161,13 +200,38 @@ namespace ninja {
             append_log(LogLevel::warning, L"tray_icon_rejected");
         }
 
-        // > 0: GetMessageW returns -1 on error an d0 on WM_QUIT
-        MSG message = {};
-        while (GetMessageW(&message, nullptr, 0, 0) > 0) {
-            TranslateMessage(&message);
-            DispatchMessageW(&message);
+        // after the window, so the watchdog can find it
+        state.watchdog_process = start_watchdog();
+
+        for (;;) {
+            // no watchdog: wait on message only
+            DWORD handle_count = 0;
+            if (state.watchdog_process != nullptr) {
+                handle_count = 1;
+            }
+
+            DWORD wait = MsgWaitForMultipleObjectsEx(handle_count, &state.watchdog_process, INFINITE, QS_ALLINPUT,
+                MWMO_INPUTAVAILABLE);
+            if (wait == WAIT_FAILED) {
+                append_log(LogLevel::error, L"app_wait_rejected", {{L"win32_error", std::to_wstring(GetLastError())}});
+                exit_app(window);
+                break;
+            }
+
+            // message index = handle count
+            if (wait == WAIT_OBJECT_0 + handle_count) {
+                if (!pump_messages()) {
+                    break;
+                }
+                continue;
+            }
+            on_watchdog_ended(state);
         }
 
+        // the watchdog sees the app end, restores and exits by itself
+        if (state.watchdog_process != nullptr) {
+            CloseHandle(state.watchdog_process);
+        }
         append_log(LogLevel::info, L"exit");
         CloseHandle(mutex);
         return ExitCode::success;
