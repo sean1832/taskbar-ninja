@@ -116,7 +116,7 @@ namespace ninja {
         DWORD written_bytes = 0;
         WriteFile(file, default_config_text, sizeof(default_config_text) - 1, &written_bytes, nullptr);
         CloseHandle(file);
-        append_log(LogLevel::info, L"config written", {{L"path", path}});
+        append_log(LogLevel::info, L"config_written", {{L"path", path}});
         return path;
     }
 

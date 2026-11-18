@@ -86,7 +86,7 @@ namespace {
             return ninja::run_watchdog(app_process_id);
         }
         ninja::append_log(LogLevel::error, L"arguments_rejected", {
-            {L"message", L"arguments must be empty, --restore or --watchdog <process id>"},
+            {L"message", L"arguments must be empty, --restore, --configs or --watchdog <process id>"},
         });
         return ExitCode::arguments_rejected;
     }
