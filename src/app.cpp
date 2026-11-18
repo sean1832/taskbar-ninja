@@ -78,6 +78,7 @@ namespace ninja {
                 append_log(LogLevel::error, L"watchdog_restart_limit", {
                     {L"max_restarts", std::to_wstring(max_watchdog_restart)}
                 });
+                return;
             }
             state.watchdog_restart_count += 1;
             state.watchdog_process = start_watchdog();

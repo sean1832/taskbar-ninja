@@ -66,7 +66,7 @@ namespace ninja {
             // SMTO_ABORTIFHUNG: give up at once when Windows already marks the window hung
             DWORD_PTR result = 0;
             UINT flags = SMTO_BLOCK | SMTO_ABORTIFHUNG;
-            LRESULT answered = SendMessageTimeoutW(app_window, WM_NULL, 0, 0, flags, freeze_check_interval_milliseconds, &result);
+            LRESULT answered = SendMessageTimeoutW(app_window, WM_NULL, 0, 0, flags, freeze_timeout_milliseconds, &result);
             if (answered != 0) {
                 return false;
             }
@@ -96,7 +96,7 @@ namespace ninja {
                 if (wait == WAIT_OBJECT_0) {
                     return WatchEnd::app_ended;
                 }
-                if (wait == WAIT_TIMEOUT) {
+                if (wait == WAIT_FAILED) {
                     append_log(LogLevel::error, L"watch_wait_rejected", {{L"win32_error", std::to_wstring(GetLastError())}});
                     return WatchEnd::wait_failed;
                 }
