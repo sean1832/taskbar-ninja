@@ -4,7 +4,10 @@
 
 #include <cwchar>
 #include <string>
+#include <optional>
+#include <vector>
 
+#include "config.h"
 #include "exit_code.h"
 #include "log.h"
 #include "monitor.h"
@@ -187,6 +190,30 @@ namespace ninja {
             }
         }
 
+        // one line per monitor: the settings step 3 will use
+        void log_monitor_settings(const std::wstring& config_path, const std::vector<Monitor>& monitors) {
+            for (const Monitor& monitor : monitors) {
+                std::optional<MonitorSettings> settings = read_monitor_settings(config_path, monitor.model_name);
+                if (!settings.has_value()) {
+                    append_log(LogLevel::warning, L"settings_rejected", {{L"monitor", monitor.model_name}});
+                    continue;
+                }
+
+                std::wstring auto_hide = L"false";
+                if (settings->auto_hide) {
+                    auto_hide = L"true";
+                }
+                append_log(LogLevel::info, L"settings", {
+                    {L"monitor", monitor.model_name},
+                    {L"auto_hide", auto_hide},
+                    {L"show_delay_ms", std::to_wstring(settings->show_delay_ms)},
+                    {L"hide_delay_ms", std::to_wstring(settings->hide_delay_ms)},
+                    {L"hot_zone_pixels", std::to_wstring(settings->hot_zone_pixels)},
+                });
+            }
+        }
+
+
         // last chance before windows ends a crashed app
         LONG WINAPI on_unhandled_exception(EXCEPTION_POINTERS* exception) {
             // restore first: allocates nothing, so it works with a broken heap
@@ -241,7 +268,10 @@ namespace ninja {
         }
 
         restore_taskbar_and_log(L"start");
-        log_monitor_list(build_monitor_list());
+        std::wstring config_path = write_default_config();
+        std::vector<Monitor> monitors = build_monitor_list();
+        log_monitor_list(monitors);
+        log_monitor_settings(config_path, monitors);
 
         AppState state;
         state.taskbar_created_message = RegisterWindowMessageW(L"TaskbarCreated");
