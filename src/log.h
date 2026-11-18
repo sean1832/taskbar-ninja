@@ -17,4 +17,6 @@ namespace ninja {
     /// Appends one line of key=value fields to the log, with time, process id and role in front.
     /// Remarks: opens and closes the file each call, so several processes can share it.
     void append_log(std::wstring_view fields);
+
+    // TODO: severity?
 } // namespace ninja

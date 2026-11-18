@@ -20,6 +20,10 @@ add_executable(taskbar-ninja WIN32
         src/log.cpp
         src/taskbar.cpp
         src/taskbar.h
+        src/tray.cpp
+        src/tray.h
+        src/app.cpp
+        src/app.h
 )
 
 target_compile_definitions(taskbar-ninja PRIVATE

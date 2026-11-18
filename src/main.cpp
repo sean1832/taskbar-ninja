@@ -4,6 +4,7 @@
 #include <cwchar>
 #include <string_view>
 
+#include "app.h"
 #include "exit_code.h"
 #include "log.h"
 #include "taskbar.h"
@@ -12,21 +13,26 @@ namespace {
     using ninja::ExitCode;
 
     /// Picks the mode from the commandline and executes
-    ExitCode run_mode(int argument_count, wchar_t** arguments) {
+    ExitCode run_mode(HINSTANCE instance, int argument_count, wchar_t** arguments) {
         if (argument_count <= 1) {
             ninja::set_log_role(L"app");
             ninja::rotate_log();
             ninja::append_log(L"event=start");
-            // TODO: return ninja::run_app(instance)
-            return ExitCode::success;
+            return ninja::run_app(instance);
         }
 
         std::wstring_view mode = arguments[1];
         if (mode == L"--restore" && argument_count == 2) {
             ninja::set_log_role(L"restore");
             ninja::append_log(L"event=start");
+            // restore first: works even if app is frozen
             ninja::restore_taskbar_and_log(L"command");
-            // TODO: restore every taskbar, close the running app
+            // close a running app, so it cannot hide again
+            HWND app_window = FindWindowW(ninja::app_window_class, nullptr);
+            if (app_window != nullptr) {
+                PostMessageW(app_window, WM_CLOSE, 0, 0);
+                ninja::append_log(L"event=app_close_requested");
+            }
             return ExitCode::success;
         }
 
@@ -51,11 +57,11 @@ namespace {
     }
 } // namespace
 
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     // CommandLineToArgvW handles quotes. lpCmdLine does not split
     int argument_count = 0;
     wchar_t** arguments = CommandLineToArgvW(GetCommandLineW(), &argument_count);
-    ExitCode exit_code = run_mode(argument_count, arguments);
+    ExitCode exit_code = run_mode(instance, argument_count, arguments);
     LocalFree(arguments);
     return static_cast<int>(exit_code);
 }
