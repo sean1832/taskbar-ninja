@@ -148,6 +148,8 @@ namespace ninja {
 
         STARTUPINFOW startup = {};
         startup.cb = sizeof(startup);
+        // no busy cursor: the watchdog never shows a window
+        startup.dwFlags = STARTF_FORCEOFFFEEDBACK;
         PROCESS_INFORMATION process = {};
 
         // leave the job (process group), so stopping the app's job does not end the watchdog too
