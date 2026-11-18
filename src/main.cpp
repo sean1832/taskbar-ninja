@@ -47,19 +47,25 @@ namespace {
         if (mode == L"--configs" && argument_count == 2) {
             ninja::set_log_role(L"show_configs");
             ninja::append_log(LogLevel::info, L"start");
-            std::wstring appdata_folder = ninja::app_data_folder();
+            std::wstring folder = ninja::app_data_folder();
+            if (folder.empty()) {
+                ninja::append_log(LogLevel::error, L"folder_not_opened", {{L"message", L"APPDATA must be set"}});
+                return ExitCode::folder_not_opened;
+            }
+
             // open folder in explorer
             HINSTANCE result = ShellExecuteW(
                 nullptr,                // Parent window handle
                 L"open",                // Operation to perform
-                appdata_folder.c_str(), // Path to the folder
+                folder.c_str(), // Path to the folder
                 nullptr,                // Parameters (not needed for folders)
                 nullptr,                // Default working directory
                 SW_SHOWNORMAL           // Show window normally
             );
-            if (reinterpret_cast<INT_PTR>(result) <= 32) {
-                ninja::append_log(LogLevel::error, L"invalid_filepath", {{L"win32_error", std::to_wstring(GetLastError())}});
-                return ExitCode::invalid_filepath;
+            auto result_code = reinterpret_cast<INT_PTR>(result);
+            if (result_code <= 32) {
+                ninja::append_log(LogLevel::error, L"folder_not_opened", {{L"shell_error", std::to_wstring(result_code)}});
+                return ExitCode::folder_not_opened;
             }
             return ExitCode::success;
         }
