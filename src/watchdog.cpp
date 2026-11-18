@@ -20,7 +20,9 @@ namespace ninja {
         constexpr UINT restore_hotkey_modifiers = MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT;
         constexpr UINT restore_hotkey_key = 'T';
 
-        /// Why the watchdog stopped
+        /**
+         * Why the watchdog stopped watching.
+         */
         enum class WatchEnd {
             app_ended,
             app_frozen,

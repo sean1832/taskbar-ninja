@@ -19,7 +19,10 @@ namespace ninja {
         // stops a watchdog that dies at once from restarting forever
         constexpr int max_watchdog_restart = 10;
 
-        /// State of the running main app. Lives on the stack of run_app; the window holds a pointer to it.
+        /**
+         * State of the running main app.
+         * @remarks Lives on the stack of run_app, and the window holds a pointer to it.
+         */
         struct AppState {
             HWND window = nullptr;
             bool taskbar_hidden = false;

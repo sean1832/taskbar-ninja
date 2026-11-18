@@ -13,7 +13,13 @@
 namespace {
     using ninja::ExitCode;
 
-    /// Picks the mode from the commandline and executes
+    /**
+     * Picks the mode from the command line and runs it.
+     * @param instance module handle from wWinMain
+     * @param argument_count number of command-line arguments, including the exe path
+     * @param arguments command-line arguments from CommandLineToArgvW
+     * @return exit code of the mode, or arguments_rejected
+     */
     ExitCode run_mode(HINSTANCE instance, int argument_count, wchar_t** arguments) {
         if (argument_count <= 1) {
             ninja::set_log_role(L"app");
