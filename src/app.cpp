@@ -115,7 +115,7 @@ namespace ninja {
 
             // the new taskbar is visible; hide sets this back to true on success
             state.taskbar_hidden = false;
-            hide_primary_taskbar();
+            hide_primary_taskbar(state);
         }
 
         void on_tray_activated(AppState& state, LPARAM lparam) {
