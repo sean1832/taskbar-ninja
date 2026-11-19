@@ -32,6 +32,8 @@ add_executable(taskbar-ninja WIN32
         src/config.h
         src/visibility.cpp
         src/visibility.h
+        src/edge.cpp
+        src/edge.h
         src/workarea.cpp
         src/workarea.h
 )

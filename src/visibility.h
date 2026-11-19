@@ -23,7 +23,7 @@ namespace ninja {
      * @param cursor_pixels mouse position
      * @param now_ms tick count of this reading
      * @return new visibility
-     * @remarks The taskbar area counts only while the taskbar shows, so a hidden taskbar does not make the hot zone taller.
+     * @remarks The hot zone follows the taskbar edge. The taskbar area counts only while the taskbar shows, so a hidden taskbar does not make the hot zone thicker.
      */
     [[nodiscard]] Visibility apply_mouse(const Visibility& visibility, const MonitorSettings& settings,
         const RECT& monitor_bounds_pixels, const RECT& taskbar_bounds_pixels, POINT cursor_pixels, ULONGLONG now_ms);

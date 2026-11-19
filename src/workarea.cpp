@@ -1,7 +1,10 @@
 ﻿#include "workarea.h"
 
-#include <optional>
 #include <windows.h>
+
+#include <optional>
+
+#include "edge.h"
 
 namespace ninja {
     namespace {
@@ -26,43 +29,34 @@ namespace ninja {
                 return true;
             }
             // no SPIF_SENDCHANGE: Explorer takes that broadcast as a cue to reserve the strip again
-            if (!SystemParametersInfoW(SPI_SETWORKAREA, 0, &current_pixels, 0)) {
+            if (!SystemParametersInfoW(SPI_SETWORKAREA, 0, &target_pixels, 0)) {
                 return false;
             }
             EnumWindows(notify_maximized_window, reinterpret_cast<LPARAM>(monitor));
             return true;
         }
 
-        // monitor minus the strip teh taskbar sits on; the taskbar can dock at any edge
-        // Windows 11 22H2 later docks the taskbar on all four edges.
+        // monitor minus the strip the taskbar sits on
         std::optional<RECT> make_reserved_area(const RECT& monitor_pixels, const RECT& taskbar_pixels) {
             RECT overlap_pixels = {};
             if (!IntersectRect(&overlap_pixels, &monitor_pixels, &taskbar_pixels)) {
                 return std::nullopt;
             }
 
-            LONG overlap_width = overlap_pixels.right - overlap_pixels.left;
-            LONG overlap_height = overlap_pixels.bottom - overlap_pixels.top;
             RECT reserved_pixels = monitor_pixels;
-            // wide strip: top or bottom edge, whichever is nearer
-            if (overlap_width >= overlap_height) {
-                LONG gap_to_top = overlap_pixels.top - monitor_pixels.top;
-                LONG gap_to_bottom = overlap_pixels.bottom - monitor_pixels.bottom;
-                if (gap_to_top < gap_to_bottom) {
-                    reserved_pixels.top = overlap_pixels.bottom;
-                } else {
-                  reserved_pixels.bottom = overlap_pixels.top;
-                }
-                return reserved_pixels;
-            }
-
-            // tall strip: left or right edge, whichever is nearer
-            LONG gap_to_left = overlap_pixels.left - monitor_pixels.left;
-            LONG gap_to_right = monitor_pixels.right - overlap_pixels.right;
-            if (gap_to_left < gap_to_right) {
+            switch (resolve_taskbar_edge(monitor_pixels, taskbar_pixels)) {
+            case TaskbarEdge::bottom:
+                reserved_pixels.bottom = overlap_pixels.top;
+                break;
+            case TaskbarEdge::top:
+                reserved_pixels.top = overlap_pixels.bottom;
+                break;
+            case TaskbarEdge::left:
                 reserved_pixels.left = overlap_pixels.right;
-            } else {
+                break;
+            case TaskbarEdge::right:
                 reserved_pixels.right = overlap_pixels.left;
+                break;
             }
             return reserved_pixels;
         }

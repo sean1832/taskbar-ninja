@@ -15,7 +15,7 @@ namespace ninja {
         bool cover_taskbar_area = false; ///< let windows fill the taskbar strip while the taskbar auto-hides
         int show_delay_ms = 0;           ///< time in the hot zone before the taskbar shows
         int hide_delay_ms = 300;         ///< time away from the taskbar before it hides
-        int hot_zone_pixels = 2;         ///< height of the strip at the bottom edge
+        int hot_zone_pixels = 2;         ///< thickness of the strip at the taskbar edge
     };
 
     /**
