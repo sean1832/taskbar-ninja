@@ -32,6 +32,10 @@ namespace ninja {
         // editors save in steps; Explorer makes new taskbars a little after a display change
         constexpr UINT rebuild_delay_ms = 1000;
 
+        constexpr UINT_PTR work_area_timer_id = 3;
+        // explorer finishes its own change first. cap a fight over the taskbar at once over a second
+        constexpr UINT work_area_check_delay_ms = 1000;
+
         // one monitor, its settings, and whether its taskbar is hidden now
         struct MonitorState {
             Monitor monitor;
@@ -238,6 +242,28 @@ namespace ninja {
             rebuild_monitors(state);
         }
 
+        // a new change during the delay starts the delay again
+        void start_work_area_timer(AppState& state) {
+            if (SetTimer(state.window, work_area_timer_id, work_area_check_delay_ms, nullptr) == 0) {
+                append_log(LogLevel::error, L"work_area_timer_rejected", {{L"win32_error", std::to_wstring(GetLastError())}});
+            }
+        }
+
+        // cover again each monitor whose strip explorer took back
+        void on_work_area_timer(AppState& state) {
+            // SetTimer repeats. one check per burst of changes
+            KillTimer(state.window, work_area_timer_id);
+            for (MonitorState& monitor_state : state.monitors) {
+                // only a lost cover. a monitor this app never covered stay as is
+                if (monitor_state.work_area_covered && !is_work_area_covered(monitor_state.monitor.handle)) {
+                    monitor_state.work_area_covered = false;
+                    append_log(LogLevel::info, L"work_area_lost", {{L"monitor", monitor_state.monitor.model_name}});
+                }
+            }
+            // covers each monitor that still wants it
+            apply_hiding(state);
+        }
+
         // any file in the config folder changed, log.txt included
         void on_config_folder_changed(AppState& state) {
             // watch again first, so a change during the work below still signals
@@ -383,7 +409,15 @@ namespace ninja {
                 if (wparam == rebuild_timer_id) {
                     on_rebuild_timer(*state);
                 }
+                if (wparam == work_area_timer_id) {
+                    on_work_area_timer(*state);
+                }
                 return 0;
+            case WM_SETTINGCHANGE:
+                // explorer tells every window after it takes the strip back
+                if (wparam == SPI_SETWORKAREA) {
+                    start_work_area_timer(*state);
+                }
             case WM_DISPLAYCHANGE:
                 // monitor added or removed, or a new resolution
                 append_log(LogLevel::info, L"display_changed");
