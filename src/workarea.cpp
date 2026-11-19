@@ -8,18 +8,37 @@
 
 namespace ninja {
     namespace {
-        // tells one maximized window on the monitor to fit the new work area
-        BOOL CALLBACK notify_maximized_window(HWND window, LPARAM lparam) {
-            HMONITOR monitor = reinterpret_cast<HMONITOR>(lparam);
+        // one work area change on one monitor
+        struct WorkAreaChange {
+            HMONITOR monitor;
+            RECT current_pixels;
+            RECT target_pixels;
+        };
+
+        // moves each edge of one maximized window on the monitor by the work area change
+        BOOL CALLBACK resize_maximized_window(HWND window, LPARAM lparam) {
+            const WorkAreaChange* change = reinterpret_cast<const WorkAreaChange*>(lparam);
             if (!IsWindowVisible(window) || !IsZoomed(window)) {
                 return TRUE;
             }
-            if (MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST) != monitor) {
+            if (MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST) != change->monitor) {
+                return TRUE;
+            }
+            RECT window_pixels = {};
+            if (!GetWindowRect(window, &window_pixels)) {
                 return TRUE;
             }
 
-            // notify: a hung window cannot block this
-            SendNotifyMessageW(window, WM_SETTINGCHANGE, SPI_SETWORKAREA, 0);
+            // keeps the frame overhang past the work area. the window stays maximized
+            window_pixels.left += change->target_pixels.left - change->current_pixels.left;
+            window_pixels.top += change->target_pixels.top - change->current_pixels.top;
+            window_pixels.right += change->target_pixels.right - change->current_pixels.right;
+            window_pixels.bottom += change->target_pixels.bottom - change->current_pixels.bottom;
+            const LONG width_pixels = window_pixels.right - window_pixels.left;
+            const LONG height_pixels = window_pixels.bottom - window_pixels.top;
+            // async: a hung window cannot block this process
+            SetWindowPos(window, nullptr, window_pixels.left, window_pixels.top, width_pixels, height_pixels,
+                SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
             return TRUE;
         }
 
@@ -32,7 +51,9 @@ namespace ninja {
             if (!SystemParametersInfoW(SPI_SETWORKAREA, 0, &target_pixels, 0)) {
                 return false;
             }
-            EnumWindows(notify_maximized_window, reinterpret_cast<LPARAM>(monitor));
+
+            WorkAreaChange chagne = {monitor, current_pixels, target_pixels};
+            EnumWindows(resize_maximized_window, reinterpret_cast<LPARAM>(&chagne));
             return true;
         }
 
