@@ -23,12 +23,23 @@ namespace ninja {
         // stops a watchdog that dies at once from restarting forever
         constexpr int max_watchdog_restart = 10;
 
+
+        struct MonitorState {
+            Monitor monitor;
+            MonitorSettings settings;
+            bool taskbar_hidden = false;
+        };
+
         /**
          * State of the running main app.
          * @remarks Lives on the stack of run_app, and the window holds a pointer to it.
          */
         struct AppState {
             HWND window = nullptr;
+            // tray switch; off = every taskbar show
+            bool hiding_enabled = true;
+            std::wstring config_path;
+            std::vector<MonitorState> monitors;
             bool taskbar_hidden = false;
             HANDLE watchdog_process = nullptr;
             int watchdog_restart_count = 0;
@@ -40,30 +51,58 @@ namespace ninja {
             return reinterpret_cast<AppState*>(GetWindowLongPtrW(window, GWLP_USERDATA));
         }
 
-        void hide_primary_taskbar(AppState& state) {
-            HWND taskbar = find_primary_taskbar();
+        std::vector<MonitorState> build_monitor_states(const std::wstring& config_path) {
+            std::vector<Monitor> monitors = build_monitor_list();
+            log_monitor_list(monitors);
+
+            std::vector<MonitorState> states;
+            for (const Monitor& monitor : monitors) {
+                MonitorState monitor_state;
+                monitor_state.monitor = monitor;
+                std::optional<MonitorSettings> settings = read_monitor_settings(config_path, monitor.model_name);
+                if (settings.has_value()) {
+                    monitor_state.settings = *settings;
+                } else {
+                    append_log(LogLevel::warning, L"settings_rejected", {{L"monitor", monitor.model_name}});
+                }
+                states.push_back(monitor_state);
+            }
+            return states;
+        }
+
+        void set_taskbar_hidden(MonitorState& monitor_state, bool should_hide) {
+            HWND taskbar = monitor_state.monitor.taskbar;
             if (taskbar == nullptr) {
-                append_log(LogLevel::warning, L"hide_skipped", {{L"message", L"explorer must be running"}});
+                return;
+            }
+            if (should_hide == monitor_state.taskbar_hidden) {
+                return;
+            }
+
+            const std::wstring& model_name = monitor_state.monitor.model_name;
+            if (!should_hide) {
+                show_taskbar(taskbar);
+                monitor_state.taskbar_hidden = false;
+                append_log(LogLevel::info, L"show", {{L"monitor", model_name}});
                 return;
             }
 
             if (!hide_taskbar(taskbar)) {
-                append_log(LogLevel::error, L"hide_rejected", {{L"win32_error", std::to_wstring(GetLastError())}});
+                append_log(LogLevel::error, L"hide_rejected", {
+                    {L"monitor", model_name},
+                    {L"win32_error", std::to_wstring(GetLastError())}
+                });
                 return;
             }
-            state.taskbar_hidden = true;
-            append_log(LogLevel::info, L"hide");
+            monitor_state.taskbar_hidden = true;
+            append_log(LogLevel::info, L"hide", {{L"monitor", model_name}});
         }
 
-        void show_primary_taskbar(AppState& state) {
-            HWND taskbar = find_primary_taskbar();
-            if (taskbar == nullptr) {
-                append_log(LogLevel::warning, L"show_skipped", {{L"message", L"explorer must be running"}});
-                return;
+        void apply_hiding(AppState& state) {
+            for (MonitorState& monitor_state : state.monitors) {
+                bool should_hide = state.hiding_enabled && monitor_state.settings.auto_hide;
+                set_taskbar_hidden(monitor_state, should_hide);
             }
-            show_taskbar(taskbar);
-            state.taskbar_hidden = false;
-            append_log(LogLevel::info, L"show");
         }
 
         void exit_app(HWND window) {
@@ -72,7 +111,6 @@ namespace ninja {
             // WM_DESTROY follows, which ends the message loop
             DestroyWindow(window);
         }
-
 
         void on_watchdog_ended(AppState& state) {
             DWORD exit_code = 0;
@@ -113,13 +151,10 @@ namespace ninja {
             if (!add_tray_icon(state.window, L"Taskbar Ninja")) {
                 append_log(LogLevel::warning, L"tray_icon_rejected");
             }
-            if (!state.taskbar_hidden) {
-                return;
-            }
 
             // the new taskbar is visible; hide sets this back to true on success
-            state.taskbar_hidden = false;
-            hide_primary_taskbar(state);
+            state.monitors = build_monitor_states(state.config_path);
+            apply_hiding(state);
         }
 
         void on_tray_activated(AppState& state, LPARAM lparam) {
@@ -135,11 +170,8 @@ namespace ninja {
             case TrayCommand::none:
                 return;
             case TrayCommand::toggle_hide:
-                if (state.taskbar_hidden) {
-                    show_primary_taskbar(state);
-                    return;
-                }
-                hide_primary_taskbar(state);
+                state.hiding_enabled = !state.hiding_enabled;
+                apply_hiding(state);
                 return;
             case TrayCommand::restore_and_exit:
                 exit_app(state.window);
@@ -187,29 +219,6 @@ namespace ninja {
                 return 0;
             default:
                 return DefWindowProcW(window, message, wparam, lparam);
-            }
-        }
-
-        // one line per monitor: the settings step 3 will use
-        void log_monitor_settings(const std::wstring& config_path, const std::vector<Monitor>& monitors) {
-            for (const Monitor& monitor : monitors) {
-                std::optional<MonitorSettings> settings = read_monitor_settings(config_path, monitor.model_name);
-                if (!settings.has_value()) {
-                    append_log(LogLevel::warning, L"settings_rejected", {{L"monitor", monitor.model_name}});
-                    continue;
-                }
-
-                std::wstring auto_hide = L"false";
-                if (settings->auto_hide) {
-                    auto_hide = L"true";
-                }
-                append_log(LogLevel::info, L"settings", {
-                    {L"monitor", monitor.model_name},
-                    {L"auto_hide", auto_hide},
-                    {L"show_delay_ms", std::to_wstring(settings->show_delay_ms)},
-                    {L"hide_delay_ms", std::to_wstring(settings->hide_delay_ms)},
-                    {L"hot_zone_pixels", std::to_wstring(settings->hot_zone_pixels)},
-                });
             }
         }
 
@@ -268,13 +277,11 @@ namespace ninja {
         }
 
         restore_taskbar_and_log(L"start");
-        std::wstring config_path = write_default_config();
-        std::vector<Monitor> monitors = build_monitor_list();
-        log_monitor_list(monitors);
-        log_monitor_settings(config_path, monitors);
-
         AppState state;
+        state.config_path = write_default_config();
+        state.monitors = build_monitor_states(state.config_path);
         state.taskbar_created_message = RegisterWindowMessageW(L"TaskbarCreated");
+
         if (state.taskbar_created_message == 0) {
             append_log(LogLevel::warning, L"taskbar_created_rejected", {{L"win32_error", std::to_wstring(GetLastError())}});
         }
@@ -295,6 +302,7 @@ namespace ninja {
 
         // after the window, so the watchdog can find it
         state.watchdog_process = start_watchdog();
+        apply_hiding(state);
 
         for (;;) {
             // no watchdog: wait on message only
