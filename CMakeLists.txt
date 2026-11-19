@@ -36,6 +36,8 @@ add_executable(taskbar-ninja WIN32
         src/edge.h
         src/workarea.cpp
         src/workarea.h
+        src/hold.cpp
+        src/hold.h
 )
 
 target_compile_definitions(taskbar-ninja PRIVATE

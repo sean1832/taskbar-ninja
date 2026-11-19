@@ -9,6 +9,7 @@
 
 #include "config.h"
 #include "exit_code.h"
+#include "hold.h"
 #include "log.h"
 #include "monitor.h"
 #include "taskbar.h"
@@ -64,6 +65,10 @@ namespace ninja {
             int watchdog_restart_count = 0;
             // Explorer broadcasts it after a restart; 0 = not registered
             UINT taskbar_created_message = 0;
+            HMONITOR shell_monitor = nullptr; // monitor whose taskbar the front window keeps shown. nullptr = none
+            int open_menu_count = 0; // popup menu open now
+            HMONITOR menu_monitor = nullptr; // monitor of the last one opened
+            HWINEVENTHOOK window_event_hook = nullptr; // foreground and menu events. nullptr = not hooked
         };
 
         AppState* app_state_of(HWND window) {
@@ -285,29 +290,104 @@ namespace ninja {
             start_rebuild_timer(state);
         }
 
-        void on_mouse_timer(AppState& state) {
+        // reads the mouse and the holds, then hides or shows each taskbar
+        void apply_visibility(AppState& state) {
             POINT cursor_pixels = {};
-            // fails on the secure desktop (lock screen, UAC prompt); next tick tries again
+            // fails on the secure desktop (lock screen, UAC prompt). next tick tries again
             if (!GetCursorPos(&cursor_pixels)) {
                 return;
             }
 
+            HMONITOR popup_monitor = resolve_popup_monitor(cursor_pixels);
+            bool is_menu_open = state.open_menu_count > 0;
             ULONGLONG now_ms = GetTickCount64();
             for (MonitorState& monitor_state : state.monitors) {
+                HMONITOR monitor = monitor_state.monitor.handle;
+                Hold hold;
+                hold.is_over_popup = popup_monitor == monitor;
+                hold.is_shell_active = state.shell_monitor == monitor || (is_menu_open && state.menu_monitor == monitor);
+
                 RECT taskbar_bounds_pixels = {};
                 // fails for a missing taskbar: empty area, so only the hot zone counts
                 GetWindowRect(monitor_state.monitor.taskbar, &taskbar_bounds_pixels);
                 monitor_state.visibility = apply_mouse(monitor_state.visibility, monitor_state.settings,
-                    monitor_state.monitor.bounds_pixels, taskbar_bounds_pixels, cursor_pixels, Hold{}, now_ms);
+                    monitor_state.monitor.bounds_pixels, taskbar_bounds_pixels, cursor_pixels, hold, now_ms);
             }
             apply_hiding(state);
         }
 
-        void exit_app(HWND window) {
+        // WinEvent callbacks carry no user data; set while the hook lives
+        AppState* hooked_state = nullptr;
+
+        void on_foreground_changed(AppState& state, HWND window) {
+            state.shell_monitor = resolve_shell_monitor(window);
+            // a missed menu end cannot hold forever
+            state.open_menu_count = 0;
+            apply_visibility(state);
+        }
+
+        void on_menu_opened(AppState& state, HWND menu) {
+            state.open_menu_count += 1;
+            if (menu != nullptr) {
+                state.menu_monitor = MonitorFromWindow(menu, MONITOR_DEFAULTTONEAREST);
+            }
+            apply_visibility(state);
+        }
+
+        // a submenu closes on its own. the menu it came from stays open
+        void on_menu_closed(AppState& state) {
+            if (state.open_menu_count > 0) {
+                state.open_menu_count -= 1;
+            }
+            apply_visibility(state);
+        }
+
+        void CALLBACK on_window_event(HWINEVENTHOOK, DWORD event, HWND window, LONG, LONG, DWORD, DWORD) {
+            if (hooked_state == nullptr) {
+                return;
+            }
+
+            switch (event) {
+            case EVENT_SYSTEM_FOREGROUND:
+                on_foreground_changed(*hooked_state, window);
+                return;
+            case EVENT_SYSTEM_MENUPOPUPSTART:
+                on_menu_opened(*hooked_state, window);
+                return;
+            case EVENT_SYSTEM_MENUPOPUPEND:
+                on_menu_closed(*hooked_state);
+                return;
+            default:
+                // menu bar start and end sit inside the hooked range
+                return;
+            }
+        }
+
+        void start_window_events(AppState& state) {
+            hooked_state = &state;
+            // one range: foreground (3) to popup menu end (7). out of context, so nothing loads into other processes
+            // own process included, so the tray menu of this app holds too
+            state.window_event_hook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MENUPOPUPEND, nullptr,
+                on_window_event, 0, 0, WINEVENT_OUTOFCONTEXT);
+            if (state.window_event_hook == nullptr) {
+                append_log(LogLevel::warning, L"window_event_hook_rejected");
+            }
+        }
+
+        void stop_window_events(AppState& state) {
+            if (state.window_event_hook != nullptr) {
+                UnhookWinEvent(state.window_event_hook);
+                state.window_event_hook = nullptr;
+            }
+            hooked_state = nullptr;
+        }
+
+        void exit_app(AppState& state) {
+            stop_window_events(state); // no event may hide a taskbar after the restore
             restore_taskbar_and_log(L"exit");
-            remove_tray_icon(window);
+            remove_tray_icon(state.window);
             // WM_DESTROY follows, which ends the message loop
-            DestroyWindow(window);
+            DestroyWindow(state.window);
         }
 
         void on_watchdog_ended(AppState& state) {
@@ -371,7 +451,7 @@ namespace ninja {
                 apply_hiding(state);
                 return;
             case TrayCommand::restore_and_exit:
-                exit_app(state.window);
+                exit_app(state);
                 return;
             }
         }
@@ -404,7 +484,7 @@ namespace ninja {
                 return 0;
             case WM_TIMER:
                 if (wparam == mouse_timer_id) {
-                    on_mouse_timer(*state);
+                    apply_visibility(*state);
                 }
                 if (wparam == rebuild_timer_id) {
                     on_rebuild_timer(*state);
@@ -430,7 +510,7 @@ namespace ninja {
                 }
                 return 0;
             case WM_CLOSE:
-                exit_app(window);
+                exit_app(*state);
                 return 0;
             case WM_DESTROY:
                 PostQuitMessage(0);
@@ -523,6 +603,7 @@ namespace ninja {
 
         // after the window, so the watchdog can find it
         state.watchdog_process = start_watchdog();
+        start_window_events(state);
         // after the watchdog, so a crash from here on still restores
         apply_hiding(state);
 
@@ -543,7 +624,7 @@ namespace ninja {
                 MWMO_INPUTAVAILABLE);
             if (wait == WAIT_FAILED) {
                 append_log(LogLevel::error, L"app_wait_rejected", {{L"win32_error", std::to_wstring(GetLastError())}});
-                exit_app(window);
+                exit_app(state);
                 break;
             }
 
