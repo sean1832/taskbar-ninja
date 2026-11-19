@@ -298,7 +298,7 @@ namespace ninja {
                 // fails for a missing taskbar: empty area, so only the hot zone counts
                 GetWindowRect(monitor_state.monitor.taskbar, &taskbar_bounds_pixels);
                 monitor_state.visibility = apply_mouse(monitor_state.visibility, monitor_state.settings,
-                    monitor_state.monitor.bounds_pixels, taskbar_bounds_pixels, cursor_pixels, now_ms);
+                    monitor_state.monitor.bounds_pixels, taskbar_bounds_pixels, cursor_pixels, Hold{}, now_ms);
             }
             apply_hiding(state);
         }
