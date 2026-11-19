@@ -11,10 +11,11 @@ namespace ninja {
      * Settings for the taskbar on one monitor.
      */
     struct MonitorSettings {
-        bool auto_hide = false;         ///< hide the taskbar until the mouse touches the hot zone
-        int show_delay_ms = 0;          ///< time in the hot zone before the taskbar shows
-        int hide_delay_ms = 300;        ///< time away from the taskbar before it hides
-        int hot_zone_pixels = 2;        ///< height of the strip at the bottom edge
+        bool auto_hide = false;          ///< hide the taskbar until the mouse touches the hot zone
+        bool cover_taskbar_area = false; ///< let windows fill the taskbar strip while the taskbar auto-hides
+        int show_delay_ms = 0;           ///< time in the hot zone before the taskbar shows
+        int hide_delay_ms = 300;         ///< time away from the taskbar before it hides
+        int hot_zone_pixels = 2;         ///< height of the strip at the bottom edge
     };
 
     /**

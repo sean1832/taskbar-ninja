@@ -24,6 +24,7 @@ namespace ninja {
             "; Monitor names are in log.txt, on the monitor lines.\r\n"
             "[default]\r\n"
             "auto_hide = false\r\n"
+            "cover_taskbar_area = false\r\n" // need auto_hide = true
             "show_delay_ms = 0\r\n"
             "hide_delay_ms = 300\r\n"
             "hot_zone_pixels = 2\r\n";
@@ -130,6 +131,7 @@ namespace ninja {
         SettingsSource source = {config_path, model_name};
         MonitorSettings settings;
         settings.auto_hide = read_bool(source, L"auto_hide", default_settings.auto_hide);
+        settings.cover_taskbar_area = read_bool(source, L"cover_taskbar_area", default_settings.cover_taskbar_area);
         settings.show_delay_ms = read_int(source, L"show_delay_ms", min_delay_ms, max_delay_ms, default_settings.show_delay_ms);
         settings.hide_delay_ms = read_int(source, L"hide_delay_ms", min_delay_ms, max_delay_ms, default_settings.hide_delay_ms);
         settings.hot_zone_pixels = read_int(source, L"hot_zone_pixels", min_hot_zone_pixels, max_hot_zone_pixels, default_settings.hot_zone_pixels);
