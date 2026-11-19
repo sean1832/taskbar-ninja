@@ -139,4 +139,33 @@ namespace ninja {
         }
         return settings;
     }
+
+    HANDLE start_config_watch(const std::wstring& config_path) {
+        size_t separator_index = config_path.find_last_of(L"\\");
+        if (separator_index == std::wstring::npos) {
+            return nullptr;
+        }
+        std::wstring folder = config_path.substr(0, separator_index);
+
+        // last write: saved in place; file name: saved through a temp file and a rename
+        HANDLE watch = FindFirstChangeNotificationW(folder.c_str(), FALSE,
+            FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_FILE_NAME);
+        if (watch == INVALID_HANDLE_VALUE) {
+            append_log(LogLevel::error, L"config_watch_rejected", {{L"win32_error", std::to_wstring(GetLastError())}});
+            return nullptr;
+        }
+        return watch;
+    }
+
+    ULONGLONG read_config_write_time(const std::wstring& config_path) {
+        WIN32_FILE_ATTRIBUTE_DATA attributes = {};
+        if (!GetFileAttributesExW(config_path.c_str(), GetFileExInfoStandard, &attributes)) {
+            return 0;
+        }
+
+        ULARGE_INTEGER write_time = {};
+        write_time.LowPart = attributes.ftLastWriteTime.dwLowDateTime;
+        write_time.HighPart = attributes.ftLastWriteTime.dwHighDateTime;
+        return write_time.QuadPart;
+    }
 } // namespace ninja

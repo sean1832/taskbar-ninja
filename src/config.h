@@ -1,5 +1,7 @@
 ﻿#pragma once
 
+#include <windows.h>
+
 #include <optional>
 #include <string>
 
@@ -30,4 +32,19 @@ namespace ninja {
      * @remarks Logs one line for each rejected value.
      */
     [[nodiscard]] std::optional<MonitorSettings> read_monitor_settings(const std::wstring& config_path, const std::wstring& model_name);
-}
+
+    /**
+     * Starts watching the config folder for written and renamed files.
+     * @param config_path path from write_default_config
+     * @return change handle to wait on, or nullptr when the folder cannot be watched
+     * @remarks Every file in the folder signals, log.txt included. Call FindNextChangeNotification after each signal.
+     */
+    [[nodiscard]] HANDLE start_config_watch(const std::wstring& config_path);
+
+    /**
+     * Reads when the config file was last written.
+     * @param config_path path from write_default_config
+     * @return write time in FILETIME units, or 0 when the file is missing
+     */
+    [[nodiscard]] ULONGLONG read_config_write_time(const std::wstring& config_path);
+} // namespace ninja
