@@ -138,7 +138,7 @@ namespace ninja {
         std::swprintf(time_text, 32, L"%04u-%02u-%02uT%02u:%02u:%02u.%03u",
                       now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond, now.wMilliseconds);
 
-        // 2026-11-18T10:00:00.123 ERROR app[1234] startup_failed step=window
+        // 2026-11-18T10:00:00.123 ERR app[1234] startup_failed step=window
         std::wstring line = time_text;
         line += L' ';
         line += level_text(level);
