@@ -32,6 +32,8 @@ add_executable(taskbar-ninja WIN32
         src/config.h
         src/visibility.cpp
         src/visibility.h
+        src/workarea.cpp
+        src/workarea.h
 )
 
 target_compile_definitions(taskbar-ninja PRIVATE
