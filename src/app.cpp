@@ -68,6 +68,7 @@ namespace ninja {
             UINT taskbar_created_message = 0;
             HWND foreground_window = nullptr; // front window. nullptr = none
             HMONITOR shell_monitor = nullptr; // monitor whose taskbar the front window keeps shown. nullptr = none
+            HMONITOR panel_monitor = nullptr; // monitor whose taskbar the front panel keeps shown. nullptr = none
             int open_menu_count = 0; // popup menu open now
             HMONITOR menu_monitor = nullptr; // monitor of the last one opened
             HWINEVENTHOOK window_event_hook = nullptr; // foreground and menu events. nullptr = not hooked
@@ -340,10 +341,12 @@ namespace ninja {
                 HMONITOR monitor = monitor_state.monitor.handle;
                 Hold hold;
                 hold.is_over_popup = popup_monitor == monitor;
-                hold.is_shell_active = state.shell_monitor == monitor || (is_menu_open && state.menu_monitor == monitor);
+                hold.is_menu_open = is_menu_open && state.menu_monitor == monitor;
+                hold.is_panel_active = state.panel_monitor == monitor;
                 HWND taskbar = monitor_state.monitor.taskbar;
                 // a monitor without a taskbar never matches, even before the first front window event
-                hold.is_taskbar_active = taskbar != nullptr && state.foreground_window == taskbar;
+                bool is_taskbar_active = taskbar != nullptr && state.foreground_window == taskbar;
+                hold.is_shell_active = state.shell_monitor == monitor || is_taskbar_active;
 
                 RECT taskbar_bounds_pixels = {};
                 // fails for a missing taskbar: empty area, so only the hot zone counts
@@ -360,6 +363,13 @@ namespace ninja {
         void on_foreground_changed(AppState& state, HWND window) {
             state.foreground_window = window;
             state.shell_monitor = resolve_shell_monitor(window);
+            state.panel_monitor = nullptr;
+            // panel only keep the taskbar. they follow the visible edge instead
+            if (is_panel(window)) {
+                state.panel_monitor = state.shell_monitor;
+                state.shell_monitor = nullptr;
+            }
+
             // finds Start or Search again after their process restarts
             state.panels = build_panel_list();
             // a missed menu end cannot hold forever

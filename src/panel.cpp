@@ -137,6 +137,10 @@ namespace ninja {
         return POINT{0, move_pixels};
     }
 
+    bool is_panel(HWND window) {
+        return find_panel_kind(window) != nullptr;
+    }
+
     std::vector<PanelWindow> build_panel_list() {
         std::vector<PanelWindow> panels;
         // FindWindowExW, not EnumWindows: EnumWindows skips the windows of store apps such as Start

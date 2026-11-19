@@ -9,9 +9,10 @@ namespace ninja {
      * Reasons other than the hot zone to keep one taskbar shown.
      */
     struct Hold {
-        bool is_over_popup = false;     ///< mouse over a popup of the taskbar, such as an app preview
-        bool is_shell_active = false;   ///< shell UI is in front, or a popup menu is open, on this monitor
-        bool is_taskbar_active = false; ///< the taskbar itself is in front, as after Win+B
+        bool is_over_popup = false;   ///< mouse over a popup of the taskbar, such as an app preview
+        bool is_menu_open = false;    ///< a popup menu is open on this monitor
+        bool is_panel_active = false; ///< a panel that follows the visible edge, such as Start, is in front on this monitor
+        bool is_shell_active = false; ///< other shell UI, such as quick settings, or the taskbar itself is in front on this monitor
     };
 
     /**
@@ -33,9 +34,9 @@ namespace ninja {
     * @param hold holds of this monitor
     * @param now_ms tick count of this reading
     * @return new visibility
-    * @remarks The hot zone follows the taskbar edge. The taskbar area, its popups,
-    * shell UI and popup menus count only while the taskbar shows, so a hotkey or
-    * a menu never shows a hidden taskbar. An active taskbar shows it at once, without the show delay.
+    * @remarks The hot zone follows the taskbar edge. The taskbar area, its popups, panels and popup menus count
+    * only while the taskbar shows, so Start from the Win key or a menu never shows a hidden taskbar. Other shell UI
+    * and an active taskbar show it at once, without the show delay.
     * The hide delay counts from the end of the last reason to show.
     */
     [[nodiscard]] Visibility apply_mouse(const Visibility& visibility, const MonitorSettings& settings,

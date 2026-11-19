@@ -34,9 +34,9 @@ namespace ninja {
 
         bool is_in_hot_zone = PtInRect(&hot_zone_bounds_pixels, cursor_pixels) != FALSE;
         bool is_over_taskbar = visibility.is_shown && PtInRect(&taskbar_bounds_pixels, cursor_pixels) != FALSE;
-        // keep a shown taskbar shown; a hotkey or a menu elsewhere never shows it
-        bool is_kept = visibility.is_shown && (hold.is_over_popup || hold.is_shell_active);
-        bool is_wanted = is_in_hot_zone || is_over_taskbar || is_kept || hold.is_taskbar_active;
+        // keep a shown taskbar shown; Start from the Win key or a menu elsewhere never shows it
+        bool is_kept = visibility.is_shown && (hold.is_over_popup || hold.is_menu_open || hold.is_panel_active);
+        bool is_wanted = is_in_hot_zone || is_over_taskbar || is_kept || hold.is_shell_active;
 
         Visibility next = visibility;
         if (is_wanted != visibility.is_wanted) {
@@ -47,8 +47,8 @@ namespace ninja {
         ULONGLONG elapsed_ms = now_ms - next.wanted_changed_at_ms;
         ULONGLONG show_delay_ms = static_cast<ULONGLONG>(settings.show_delay_ms);
         ULONGLONG hide_delay_ms = static_cast<ULONGLONG>(settings.hide_delay_ms);
-        // no show delay, so Win+B shows the taskbar at once
-        if (hold.is_taskbar_active) {
+        // no show delay, so Win+A and Win+B show the taskbar at once
+        if (hold.is_shell_active) {
             next.is_shown = true;
         }
         if (next.is_wanted && elapsed_ms >= show_delay_ms) {

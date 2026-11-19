@@ -27,6 +27,13 @@ namespace ninja {
     };
 
     /**
+     * Checks whether a window is a shell panel from the panel table.
+     * @param window any window
+     * @return true for Start, Search and the other panels in the table
+     */
+    [[nodiscard]] bool is_panel(HWND window);
+
+    /**
      * Builds the list of shell panel windows that exist now, from the panel table.
      * @return found panels, in window order
      */
