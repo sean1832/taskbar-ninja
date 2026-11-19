@@ -9,7 +9,7 @@
 #include <string_view>
 
 #include "log.h"
-#include "taskbar.h"
+#include "panel.h"
 
 #include "workarea.h"
 
@@ -38,6 +38,8 @@ namespace ninja {
                 if (is_changed) {
                     restored_count += 1;
                 }
+                // panels back on the taskbar, also when this app moved them before a crash
+                restore_panels(taskbar);
                 taskbar = FindWindowExW(nullptr, taskbar, class_name, nullptr);
             }
             return restored_count;

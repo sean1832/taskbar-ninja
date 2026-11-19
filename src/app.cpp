@@ -12,6 +12,7 @@
 #include "hold.h"
 #include "log.h"
 #include "monitor.h"
+#include "panel.h"
 #include "taskbar.h"
 #include "tray.h"
 #include "visibility.h"
@@ -70,6 +71,7 @@ namespace ninja {
             int open_menu_count = 0; // popup menu open now
             HMONITOR menu_monitor = nullptr; // monitor of the last one opened
             HWINEVENTHOOK window_event_hook = nullptr; // foreground and menu events. nullptr = not hooked
+            std::vector<PanelWindow> panels; // Start, Search and other panels that follow the visible edge
         };
 
         AppState* app_state_of(HWND window) {
@@ -215,6 +217,36 @@ namespace ninja {
             append_log(LogLevel::info, L"mouse_timer_started");
         }
 
+        // state of the monitor a window is on, otherwise nullptr
+        MonitorState* find_monitor_state(AppState& state, HWND window) {
+            HMONITOR monitor = MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
+            for (MonitorState& monitor_state : state.monitors) {
+                if (monitor_state.monitor.handle == monitor) {
+                    return &monitor_state;
+                }
+            }
+            return nullptr;
+        }
+
+        // moves each panel to the visible edge of its monitor: the shown taskbar, or the monitor edge
+        void align_panels(AppState& state) {
+            for (const PanelWindow& panel : state.panels) {
+                // Start or Search process ended: the next list after a foreground change finds the new window
+                if (!IsWindow(panel.window)) {
+                    continue;
+                }
+                MonitorState* monitor_state = find_monitor_state(state, panel.window);
+                if (monitor_state == nullptr || monitor_state->monitor.taskbar == nullptr) {
+                    continue;
+                }
+                RECT taskbar_bounds_pixels = {};
+                GetWindowRect(monitor_state->monitor.taskbar, &taskbar_bounds_pixels);
+                bool is_taskbar_shown = !monitor_state->taskbar_hidden;
+                align_panel(panel, monitor_state->monitor.bounds_pixels, taskbar_bounds_pixels, is_taskbar_shown);
+            }
+        }
+
+
         // covers the work area of each auto-hiding monitor that wants it, hides each auto-hide taskbar the hot zone
         // does not want shown, shows the others, then fixes the timer
         void apply_hiding(AppState& state) {
@@ -227,6 +259,8 @@ namespace ninja {
                 bool should_hide = is_auto_hiding && !monitor_state.visibility.is_shown;
                 set_taskbar_hidden(monitor_state, should_hide);
             }
+            // after the taskbar, panels follow the new state
+            align_panels(state);
             apply_mouse_timer(state);
         }
 
@@ -326,6 +360,8 @@ namespace ninja {
         void on_foreground_changed(AppState& state, HWND window) {
             state.foreground_window = window;
             state.shell_monitor = resolve_shell_monitor(window);
+            // finds Start or Search again after their process restarts
+            state.panels = build_panel_list();
             // a missed menu end cannot hold forever
             state.open_menu_count = 0;
             apply_visibility(state);
@@ -609,6 +645,7 @@ namespace ninja {
         // after the window, so the watchdog can find it
         state.watchdog_process = start_watchdog();
         start_window_events(state);
+        state.panels = build_panel_list();
         // after the watchdog, so a crash from here on still restores
         apply_hiding(state);
 

@@ -50,6 +50,6 @@ target_compile_definitions(taskbar-ninja PRIVATE
         _WIN32_WINNT=0x0A00 # Windows 10+ API
 )
 
-target_link_libraries(taskbar-ninja PRIVATE user32 shell32)
+target_link_libraries(taskbar-ninja PRIVATE user32 shell32 dwmapi)
 
 target_compile_options(taskbar-ninja PRIVATE /W4 /WX /permissive- /utf-8)
