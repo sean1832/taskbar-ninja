@@ -23,6 +23,7 @@ namespace ninja {
             {L"SearchHost.exe", L"Windows.UI.Core.CoreWindow", true},               // search
         };
 
+        // exe file name only, without the folder. empty when the process is out of reach
         void read_process_name(HWND window, wchar_t* name, DWORD name_length) {
             name[0] = L'\0';
             DWORD process_id = 0;
@@ -39,7 +40,7 @@ namespace ninja {
                 if (slash != nullptr) {
                     file_name = slash + 1;
                 }
-                wcsncpy_s(name, name_length, file_name, MAX_PATH);
+                wcsncpy_s(name, name_length, file_name, _TRUNCATE);
             }
             CloseHandle(process);
         }

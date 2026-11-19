@@ -67,7 +67,7 @@ namespace ninja {
             // Explorer broadcasts it after a restart; 0 = not registered
             UINT taskbar_created_message = 0;
             HWND foreground_window = nullptr; // front window. nullptr = none
-            HMONITOR shell_monitor = nullptr; // monitor whose taskbar the front window keeps shown. nullptr = none
+            HMONITOR shell_monitor = nullptr; // monitor whose taskbar the front shell UI shows. nullptr = none
             HMONITOR panel_monitor = nullptr; // monitor whose taskbar the front panel keeps shown. nullptr = none
             int open_menu_count = 0; // popup menu open now
             HMONITOR menu_monitor = nullptr; // monitor of the last one opened
@@ -364,7 +364,7 @@ namespace ninja {
             state.foreground_window = window;
             state.shell_monitor = resolve_shell_monitor(window);
             state.panel_monitor = nullptr;
-            // panel only keep the taskbar. they follow the visible edge instead
+            // panels only keep the taskbar. they follow the visible edge instead
             if (is_panel(window)) {
                 state.panel_monitor = state.shell_monitor;
                 state.shell_monitor = nullptr;

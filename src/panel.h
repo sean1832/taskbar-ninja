@@ -22,8 +22,8 @@ namespace ninja {
      * One shell panel window this app moves, such as Start or Search.
      */
     struct PanelWindow {
-        HWND window;                         ///< panel window
-        bool should_move_while_open = false; ///< the panel put itself back when it opens, so it also moves while open
+        HWND window = nullptr;               ///< panel window
+        bool should_move_while_open = false; ///< the panel puts itself back when it opens, so it also moves while open
     };
 
     /**
