@@ -6,7 +6,7 @@ namespace ninja {
     /**
      * Resolves the monitor whose taskbar a front window keeps shown.
      * @param window front window
-     * @return monitor of the window when it is shell UI or a taskbar, otherwise nullptr
+     * @return monitor of the window when it is shell UI, otherwise nullptr
      * @remarks Shell UI is Start, search, quick settings, notification centre, calendar, jump lists and tray overflow.
      */
     [[nodiscard]] HMONITOR resolve_shell_monitor(HWND window);

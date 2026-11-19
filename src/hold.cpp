@@ -14,8 +14,6 @@ namespace ninja {
             L"Windows.UI.Core.CoreWindow", // start, search, notification centre, calendar, jump list
             L"ControlCenterWindow", // quick settings
             L"TopLevelWindowForOverflowXamlIsland", // tray overflow
-            L"Shell_TrayWnd",
-            L"Shell_SecondaryTrayWnd"
         };
 
         // app preview. covers the whole monitor

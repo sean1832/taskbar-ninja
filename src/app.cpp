@@ -65,6 +65,7 @@ namespace ninja {
             int watchdog_restart_count = 0;
             // Explorer broadcasts it after a restart; 0 = not registered
             UINT taskbar_created_message = 0;
+            HWND foreground_window = nullptr; // front window. nullptr = none
             HMONITOR shell_monitor = nullptr; // monitor whose taskbar the front window keeps shown. nullptr = none
             int open_menu_count = 0; // popup menu open now
             HMONITOR menu_monitor = nullptr; // monitor of the last one opened
@@ -306,6 +307,9 @@ namespace ninja {
                 Hold hold;
                 hold.is_over_popup = popup_monitor == monitor;
                 hold.is_shell_active = state.shell_monitor == monitor || (is_menu_open && state.menu_monitor == monitor);
+                HWND taskbar = monitor_state.monitor.taskbar;
+                // a monitor without a taskbar never matches, even before the first front window event
+                hold.is_taskbar_active = taskbar != nullptr && state.foreground_window == taskbar;
 
                 RECT taskbar_bounds_pixels = {};
                 // fails for a missing taskbar: empty area, so only the hot zone counts
@@ -320,6 +324,7 @@ namespace ninja {
         AppState* hooked_state = nullptr;
 
         void on_foreground_changed(AppState& state, HWND window) {
+            state.foreground_window = window;
             state.shell_monitor = resolve_shell_monitor(window);
             // a missed menu end cannot hold forever
             state.open_menu_count = 0;
