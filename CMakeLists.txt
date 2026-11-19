@@ -38,6 +38,8 @@ add_executable(taskbar-ninja WIN32
         src/workarea.h
         src/hold.cpp
         src/hold.h
+        src/panel.cpp
+        src/panel.h
 )
 
 target_compile_definitions(taskbar-ninja PRIVATE
