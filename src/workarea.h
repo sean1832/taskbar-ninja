@@ -26,4 +26,12 @@ namespace ninja {
      * @remarks Needs no saved state, never waits and allocates nothing, so the crash handler can run it.
      */
     bool reset_all_work_areas();
+
+    /**
+    * Checks whether the work area of one monitor is the full monitor.
+    * @param monitor monitor handle
+    * @return true when windows can fill the taskbar strip
+    * @remarks Also true for a monitor that has no taskbar.
+    */
+    [[nodiscard]] bool is_work_area_covered(HMONITOR monitor);
 } // namespace ninja

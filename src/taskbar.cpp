@@ -74,6 +74,11 @@ namespace ninja {
         RedrawWindow(taskbar, nullptr, nullptr, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
     }
 
+    void raise_taskbar(HWND taskbar) {
+        // async: a hung Explorer cannot block this process
+        SetWindowPos(taskbar, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+    }
+
     bool is_taskbar_hidden(HWND taskbar) {
         LONG_PTR extended_style = GetWindowLongPtrW(taskbar, GWL_EXSTYLE);
         // click-through along counts: a taskbar never needs it

@@ -64,10 +64,7 @@ namespace ninja {
         BOOL CALLBACK find_covered_monitor(HMONITOR monitor, HDC, LPRECT, LPARAM lparam) {
             bool* has_covered_monitor = reinterpret_cast<bool*>(lparam);
             MONITORINFO info = {sizeof(info)};
-            if (!GetMonitorInfoW(monitor, &info)) {
-                return TRUE;
-            }
-            if (!EqualRect(&info.rcWork, &info.rcMonitor)) {
+            if (!is_work_area_covered(monitor)) {
                 return TRUE;
             }
             *has_covered_monitor = true;
@@ -110,5 +107,13 @@ namespace ninja {
         // Explorer answers by reserving every taskbar strip again; notify never waits
         SendNotifyMessageW(HWND_BROADCAST, WM_SETTINGCHANGE, SPI_SETWORKAREA, 0);
         return true;
+    }
+
+    bool is_work_area_covered(HMONITOR monitor) {
+        MONITORINFO info = {sizeof(info)};
+        if (!GetMonitorInfoW(monitor, &info)) {
+            return false;
+        }
+        return EqualRect(&info.rcWork, &info.rcMonitor) != FALSE;
     }
 } // namespace ninja

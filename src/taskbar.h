@@ -28,6 +28,13 @@ namespace ninja {
     void show_taskbar(HWND taskbar);
 
     /**
+     * Puts a taskbar above every other window, maximized windows included.
+     * @param taskbar taskbar window
+     * @remarks Explorer drops the taskbar behind a window that fills the whole monitor, which a covered work area allows.
+     */
+    void raise_taskbar(HWND taskbar);
+
+    /**
      * Checks whether a taskbar carries the flags that hide_taskbar sets.
      * @param taskbar taskbar window
      * @return true when the taskbar is hidden

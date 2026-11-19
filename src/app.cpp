@@ -15,6 +15,7 @@
 #include "tray.h"
 #include "visibility.h"
 #include "watchdog.h"
+#include "workarea.h"
 
 namespace ninja {
     namespace {
@@ -37,6 +38,7 @@ namespace ninja {
             MonitorSettings settings;
             Visibility visibility;
             bool taskbar_hidden = false;
+            bool work_area_covered = false;
         };
 
         /**
@@ -85,6 +87,7 @@ namespace ninja {
                 monitor_state.monitor = monitor;
                 // real state: a rebuild can find a taskbar that this app hid before
                 monitor_state.taskbar_hidden = monitor.taskbar != nullptr && is_taskbar_hidden(monitor.taskbar);
+                monitor_state.work_area_covered = monitor.taskbar != nullptr && is_work_area_covered(monitor.handle);
                 std::optional<MonitorSettings> settings = read_monitor_settings(config_path, monitor.model_name);
                 if (settings.has_value()) {
                     monitor_state.settings = *settings;
@@ -110,6 +113,10 @@ namespace ninja {
             const std::wstring& model_name = monitor_state.monitor.model_name;
             if (!should_hide) {
                 show_taskbar(taskbar);
+                // a window that fills the monitor would sit above the bar
+                if (monitor_state.work_area_covered) {
+                    raise_taskbar(taskbar);
+                }
                 monitor_state.taskbar_hidden = false;
                 append_log(LogLevel::info, L"show", {{L"monitor", model_name}});
                 return;
@@ -124,6 +131,39 @@ namespace ninja {
             }
             monitor_state.taskbar_hidden = true;
             append_log(LogLevel::info, L"hide", {{L"monitor", model_name}});
+        }
+
+        // no change when the work area is already in the wanted state; resets only a monitor this app covered
+        void set_work_area_covered(MonitorState& monitor_state, bool should_cover) {
+            HWND taskbar = monitor_state.monitor.taskbar;
+            if (taskbar == nullptr) {
+                return;
+            }
+            if (should_cover == monitor_state.work_area_covered) {
+                return;
+            }
+
+            // wanted state even on failure: one log line (not one per tick)
+            monitor_state.work_area_covered = should_cover;
+            HMONITOR monitor = monitor_state.monitor.handle;
+            const std::wstring& model_name = monitor_state.monitor.model_name;
+            if (!should_cover) {
+                if (!reset_work_area(monitor, taskbar)) {
+                    append_log(LogLevel::error, L"work_area_reset_rejected", {{L"monitor", model_name}});
+                    return;
+                }
+                append_log(LogLevel::info, L"work_area_reset", {{L"monitor", model_name}});
+                return;
+            }
+
+            if (!cover_work_area(monitor)) {
+                append_log(LogLevel::error, L"work_area_cover_rejected", {
+                    {L"monitor", model_name},
+                    {L"win32_error", std::to_wstring(GetLastError())}
+                });
+                return;
+            }
+            append_log(LogLevel::info, L"work_area_covered", {{L"monitor", model_name}});
         }
 
         // true when hiding is on and at least one monitor auto-hides a taskbar
@@ -165,10 +205,15 @@ namespace ninja {
             append_log(LogLevel::info, L"mouse_timer_started");
         }
 
-        // hides each auto-hide taskbar the hot zone does not want shown, shows the others, then fixes the timer
+        // covers the work area of each auto-hiding monitor that wants it, hides each auto-hide taskbar the hot zone
+        // does not want shown, shows the others, then fixes the timer
         void apply_hiding(AppState& state) {
             for (MonitorState& monitor_state : state.monitors) {
                 bool is_auto_hiding = state.hiding_enabled && monitor_state.settings.auto_hide;
+                // cover first, so a taskbar that shows below knows to go topmost
+                bool should_cover = is_auto_hiding && monitor_state.settings.cover_taskbar_area;
+                set_work_area_covered(monitor_state, should_cover);
+
                 bool should_hide = is_auto_hiding && !monitor_state.visibility.is_shown;
                 set_taskbar_hidden(monitor_state, should_hide);
             }
