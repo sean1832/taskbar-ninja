@@ -23,7 +23,7 @@ namespace ninja {
         // stops a watchdog that dies at once from restarting forever
         constexpr int max_watchdog_restart = 10;
 
-
+        // one monitor, its settings, and whether its taskbar is hidden now
         struct MonitorState {
             Monitor monitor;
             MonitorSettings settings;
@@ -36,11 +36,10 @@ namespace ninja {
          */
         struct AppState {
             HWND window = nullptr;
-            // tray switch; off = every taskbar show
+            // tray switch; off = every taskbar shows
             bool hiding_enabled = true;
             std::wstring config_path;
             std::vector<MonitorState> monitors;
-            bool taskbar_hidden = false;
             HANDLE watchdog_process = nullptr;
             int watchdog_restart_count = 0;
             // Explorer broadcasts it after a restart; 0 = not registered
@@ -51,6 +50,7 @@ namespace ninja {
             return reinterpret_cast<AppState*>(GetWindowLongPtrW(window, GWLP_USERDATA));
         }
 
+        // rejected settings: built-in values, so auto_hide is off
         std::vector<MonitorState> build_monitor_states(const std::wstring& config_path) {
             std::vector<Monitor> monitors = build_monitor_list();
             log_monitor_list(monitors);
@@ -70,6 +70,7 @@ namespace ninja {
             return states;
         }
 
+        // no change when the taskbar is already in the wanted state
         void set_taskbar_hidden(MonitorState& monitor_state, bool should_hide) {
             HWND taskbar = monitor_state.monitor.taskbar;
             if (taskbar == nullptr) {
@@ -98,6 +99,7 @@ namespace ninja {
             append_log(LogLevel::info, L"hide", {{L"monitor", model_name}});
         }
 
+        // hides each taskbar with auto_hide on, shows the others
         void apply_hiding(AppState& state) {
             for (MonitorState& monitor_state : state.monitors) {
                 bool should_hide = state.hiding_enabled && monitor_state.settings.auto_hide;
@@ -152,7 +154,7 @@ namespace ninja {
                 append_log(LogLevel::warning, L"tray_icon_rejected");
             }
 
-            // the new taskbar is visible; hide sets this back to true on success
+            // new taskbar windows, all visible; the old handles are gone
             state.monitors = build_monitor_states(state.config_path);
             apply_hiding(state);
         }
@@ -165,7 +167,7 @@ namespace ninja {
                 return;
             }
 
-            TrayCommand command = show_tray_menu(state.window, state.taskbar_hidden);
+            TrayCommand command = show_tray_menu(state.window, state.hiding_enabled);
             switch (command) {
             case TrayCommand::none:
                 return;
@@ -280,8 +282,8 @@ namespace ninja {
         AppState state;
         state.config_path = write_default_config();
         state.monitors = build_monitor_states(state.config_path);
-        state.taskbar_created_message = RegisterWindowMessageW(L"TaskbarCreated");
 
+        state.taskbar_created_message = RegisterWindowMessageW(L"TaskbarCreated");
         if (state.taskbar_created_message == 0) {
             append_log(LogLevel::warning, L"taskbar_created_rejected", {{L"win32_error", std::to_wstring(GetLastError())}});
         }
@@ -302,6 +304,7 @@ namespace ninja {
 
         // after the window, so the watchdog can find it
         state.watchdog_process = start_watchdog();
+        // after the watchdog, so a crash from here on still restores
         apply_hiding(state);
 
         for (;;) {

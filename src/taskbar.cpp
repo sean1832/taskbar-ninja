@@ -43,10 +43,6 @@ namespace ninja {
         }
     } // namespace
 
-    HWND find_primary_taskbar() {
-        return FindWindowW(taskbar_classes[0], nullptr);
-    }
-
     HWND find_taskbar(HMONITOR monitor) {
         for (const wchar_t* class_name : taskbar_classes) {
             HWND taskbar = find_taskbar_of_class(class_name, monitor);

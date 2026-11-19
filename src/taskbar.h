@@ -6,12 +6,6 @@
 
 namespace ninja {
     /**
-     * Finds the taskbar on the primary monitor.
-     * @return taskbar window, or nullptr when Explorer is not running
-     */
-    [[nodiscard]] HWND find_primary_taskbar();
-
-    /**
      * Finds the taskbar on one monitor.
      * @param monitor monitor handle
      * @return taskbar window, or nullptr when the monitor has no taskbar

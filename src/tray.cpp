@@ -31,9 +31,9 @@ namespace ninja {
         Shell_NotifyIconW(NIM_DELETE, &icon);
     }
 
-    TrayCommand show_tray_menu(HWND window, bool hide_enabled) {
+    TrayCommand show_tray_menu(HWND window, bool hiding_enabled) {
         UINT hide_flags = MF_STRING;
-        if (hide_enabled) {
+        if (hiding_enabled) {
             hide_flags |= MF_CHECKED;
         }
 
