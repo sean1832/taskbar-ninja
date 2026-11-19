@@ -93,6 +93,9 @@ namespace {
 } // namespace
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
+    // real pixels for the mouse, monitors and windows, on every monitor scale
+    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
     // CommandLineToArgvW handles quotes. lpCmdLine does not split
     int argument_count = 0;
     wchar_t** arguments = CommandLineToArgvW(GetCommandLineW(), &argument_count);

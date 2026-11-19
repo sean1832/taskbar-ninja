@@ -13,6 +13,7 @@
 #include "monitor.h"
 #include "taskbar.h"
 #include "tray.h"
+#include "visibility.h"
 #include "watchdog.h"
 
 namespace ninja {
@@ -23,10 +24,14 @@ namespace ninja {
         // stops a watchdog that dies at once from restarting forever
         constexpr int max_watchdog_restart = 10;
 
+        constexpr UINT_PTR mouse_timer_id = 1;
+        constexpr UINT mouse_timer_interval_ms = 50;
+
         // one monitor, its settings, and whether its taskbar is hidden now
         struct MonitorState {
             Monitor monitor;
             MonitorSettings settings;
+            Visibility visibility;
             bool taskbar_hidden = false;
         };
 
@@ -40,6 +45,7 @@ namespace ninja {
             bool hiding_enabled = true;
             std::wstring config_path;
             std::vector<MonitorState> monitors;
+            bool mouse_timer_running = false;
             HANDLE watchdog_process = nullptr;
             int watchdog_restart_count = 0;
             // Explorer broadcasts it after a restart; 0 = not registered
@@ -99,12 +105,71 @@ namespace ninja {
             append_log(LogLevel::info, L"hide", {{L"monitor", model_name}});
         }
 
-        // hides each taskbar with auto_hide on, shows the others
+        // true when hiding is on and at least one monitor auto-hides a taskbar
+        bool should_read_mouse(const AppState& state) {
+            if (!state.hiding_enabled) {
+                return false;
+            }
+            for (const MonitorState& monitor_state : state.monitors) {
+                if (monitor_state.settings.auto_hide && monitor_state.monitor.taskbar != nullptr) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // starts or stops the timer; no change when it is already right
+        void apply_mouse_timer(AppState& state) {
+            bool should_run = should_read_mouse(state);
+            if (should_run == state.mouse_timer_running) {
+                return;
+            }
+
+            if (!should_run) {
+                KillTimer(state.window, mouse_timer_id);
+                state.mouse_timer_running = false;
+                append_log(LogLevel::info, L"mouse_timer_stopped");
+                return;
+            }
+
+            // coalescable: Windows may wake us together with other timers
+            UINT_PTR timer = SetCoalescableTimer(state.window, mouse_timer_id, mouse_timer_interval_ms, nullptr,
+                TIMERV_DEFAULT_COALESCING);
+            if (timer == 0) {
+                append_log(LogLevel::error, L"mouse_timer_rejected", {{L"win32_error", std::to_wstring(GetLastError())}});
+                return;
+            }
+            state.mouse_timer_running = true;
+            append_log(LogLevel::info, L"mouse_timer_started");
+        }
+
+        // hides each auto-hide taskbar the hot zone does not want shown, shows the others, then fixes the timer
         void apply_hiding(AppState& state) {
             for (MonitorState& monitor_state : state.monitors) {
-                bool should_hide = state.hiding_enabled && monitor_state.settings.auto_hide;
+                bool is_auto_hiding = state.hiding_enabled && monitor_state.settings.auto_hide;
+                bool should_hide = is_auto_hiding && !monitor_state.visibility.is_shown;
                 set_taskbar_hidden(monitor_state, should_hide);
             }
+            apply_mouse_timer(state);
+        }
+
+        void on_mouse_timer(AppState& state) {
+            POINT cursor_pixels = {};
+            // fails on the secure desktop (lock screen, UAC prompt); next tick tries again
+            if (!GetCursorPos(&cursor_pixels)) {
+                return;
+            }
+
+            ULONGLONG now_ms = GetTickCount64();
+            for (MonitorState& monitor_state : state.monitors) {
+                RECT taskbar_bounds_pixels = {};
+                // fails for a missing taskbar: empty area, so only the hot zone counts
+                GetWindowRect(monitor_state.monitor.taskbar, &taskbar_bounds_pixels);
+                monitor_state.visibility = apply_mouse(monitor_state.visibility, monitor_state.settings,
+                    monitor_state.monitor.bounds_pixels, taskbar_bounds_pixels, cursor_pixels, now_ms);
+            }
+            apply_hiding(state);
         }
 
         void exit_app(HWND window) {
@@ -206,6 +271,11 @@ namespace ninja {
             switch (message) {
             case tray_message:
                 on_tray_activated(*state, lparam);
+                return 0;
+            case WM_TIMER:
+                if (wparam == mouse_timer_id) {
+                    on_mouse_timer(*state);
+                }
                 return 0;
             case WM_ENDSESSION:
                 // wparam TRUE = sign-out or shutdown goes ahead; the process can end any time after this
