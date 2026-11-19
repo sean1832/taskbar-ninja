@@ -36,8 +36,8 @@ namespace ninja {
     /**
      * Shows the tray menu at the cursor and waits for a choice.
      * @param window owner window of the menu
-     * @param taskbar_hidden puts a check mark on "Hide taskbar" when true
+     * @param hide_enabled puts a check mark on "Hide taskbar" when true
      * @return chosen command, or none when the menu closed with no choice
      */
-    [[nodiscard]] TrayCommand show_tray_menu(HWND window, bool taskbar_hidden);
+    [[nodiscard]] TrayCommand show_tray_menu(HWND window, bool hide_enabled);
 } // namespace ninja

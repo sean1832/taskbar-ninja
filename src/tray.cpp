@@ -31,14 +31,14 @@ namespace ninja {
         Shell_NotifyIconW(NIM_DELETE, &icon);
     }
 
-    TrayCommand show_tray_menu(HWND window, bool taskbar_hidden) {
+    TrayCommand show_tray_menu(HWND window, bool hide_enabled) {
         UINT hide_flags = MF_STRING;
-        if (taskbar_hidden) {
+        if (hide_enabled) {
             hide_flags |= MF_CHECKED;
         }
 
         HMENU menu = CreatePopupMenu();
-        AppendMenuW(menu, hide_flags, static_cast<UINT_PTR>(TrayCommand::toggle_hide), L"Hide taskbar");
+        AppendMenuW(menu, hide_flags, static_cast<UINT_PTR>(TrayCommand::toggle_hide), L"Hide taskbars");
         AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(menu, MF_STRING, static_cast<UINT_PTR>(TrayCommand::restore_and_exit), L"Restore and exit");
 
