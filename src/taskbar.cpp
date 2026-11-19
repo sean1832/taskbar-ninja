@@ -9,6 +9,10 @@
 #include <string_view>
 
 #include "log.h"
+#include "taskbar.h"
+
+#include "workarea.h"
+
 
 namespace ninja {
     namespace {
@@ -21,8 +25,17 @@ namespace ninja {
             // walk every top-level window of this class; one per monitor
             HWND taskbar = FindWindowExW(nullptr, nullptr, class_name, nullptr);
             while (taskbar != nullptr) {
+                bool is_changed = false;
                 if (is_taskbar_hidden(taskbar)) {
                     show_taskbar(taskbar);
+                    is_changed = true;
+                }
+                // shrinks maximized windows back
+                HMONITOR monitor = MonitorFromWindow(taskbar, MONITOR_DEFAULTTONEAREST);
+                if (is_work_area_covered(monitor) && reset_work_area(monitor, taskbar)) {
+                    is_changed =true;
+                }
+                if (is_changed) {
                     restored_count += 1;
                 }
                 taskbar = FindWindowExW(nullptr, taskbar, class_name, nullptr);
@@ -105,6 +118,9 @@ namespace ninja {
         for (const wchar_t* class_name : taskbar_classes) {
             restored_count += restore_taskbars_of_class(class_name);
         }
+
+        // backstop for a monitor whose reset was rejected; nothing to do when none is still covered
+        reset_all_work_areas();
         return restored_count;
     }
 
