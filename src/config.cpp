@@ -32,8 +32,8 @@ namespace ninja {
             "; [default] applies to every monitor. A section named after a monitor overrides it.\r\n"
             "; Monitor names are in log.txt, on the monitor lines.\r\n"
             "[default]\r\n"
-            "auto_hide = false\r\n"
-            "cover_taskbar_area = false\r\n" // need auto_hide = true
+            "auto_hide = true\r\n"
+            "cover_taskbar_area = true\r\n" // need auto_hide = true
             "show_delay_ms = 0\r\n"
             "hide_delay_ms = 300\r\n"
             "hot_zone_pixels = 2\r\n"
@@ -44,7 +44,7 @@ namespace ninja {
             "background_color = 40202020\r\n"
             "background_blur_pixels = 10\r\n"
             "; blur fades in from the inner edge, over this part of the bar thickness\r\n"
-            "background_feather = false\r\n"
+            "background_feather = true\r\n"
             "background_feather_percent = 50\r\n";
 
 
