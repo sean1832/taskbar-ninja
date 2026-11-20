@@ -6,6 +6,8 @@
 #include <string>
 #include <string_view>
 
+#include "files.h"
+
 namespace ninja {
     namespace {
         constexpr LONGLONG max_log_bytes = 1024 * 1024; // 1 MiB
@@ -14,7 +16,7 @@ namespace ninja {
         std::wstring log_role = L"main";
 
         std::wstring log_path() {
-            std::wstring folder = app_data_folder();
+            std::wstring folder = appdata_folder();
             if (folder.empty()) {
                 return {};
             }
@@ -89,20 +91,6 @@ namespace ninja {
 
     void set_log_role(std::wstring_view role) {
         log_role = role;
-    }
-
-    std::wstring app_data_folder() {
-        wchar_t buffer[MAX_PATH] = {};
-        DWORD length = GetEnvironmentVariableW(L"APPDATA", buffer, MAX_PATH);
-        // 0 = unset, >= MAX_PATH = buffer too small
-        if (length == 0 || length >= MAX_PATH) {
-            return {};
-        }
-
-        std::wstring folder = std::wstring(buffer, length) + L"\\taskbar-ninja";
-        // fails harmlessly if the folder already exists
-        CreateDirectoryW(folder.c_str(), nullptr);
-        return folder;
     }
 
     void rotate_log() {

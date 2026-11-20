@@ -6,6 +6,7 @@
 
 #include "app.h"
 #include "exit_code.h"
+#include "files.h"
 #include "log.h"
 #include "taskbar.h"
 #include "watchdog.h"
@@ -47,23 +48,15 @@ namespace {
         if (mode == L"--configs" && argument_count == 2) {
             ninja::set_log_role(L"configs");
             ninja::append_log(LogLevel::info, L"start");
-            std::wstring folder = ninja::app_data_folder();
+            const std::wstring folder = ninja::appdata_folder();
             if (folder.empty()) {
-                ninja::append_log(LogLevel::error, L"folder_not_opened", {{L"message", L"APPDATA must be set"}});
+                ninja::append_log(LogLevel::error, L"folder_not_opened", {{L"message", L"APPDATA must be set and writable"}});
                 return ExitCode::folder_not_opened;
             }
 
             // open folder in explorer
-            HINSTANCE result = ShellExecuteW(
-                nullptr,                // Parent window handle
-                L"open",                // Operation to perform
-                folder.c_str(), // Path to the folder
-                nullptr,                // Parameters (not needed for folders)
-                nullptr,                // Default working directory
-                SW_SHOWNORMAL           // Show window normally
-            );
-            auto result_code = reinterpret_cast<INT_PTR>(result);
-            if (result_code <= 32) {
+            INT_PTR result_code = 0;
+            if (!ninja::open_path(folder, &result_code)) {
                 ninja::append_log(LogLevel::error, L"folder_not_opened", {{L"shell_error", std::to_wstring(result_code)}});
                 return ExitCode::folder_not_opened;
             }

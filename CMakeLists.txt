@@ -43,6 +43,8 @@ add_executable(taskbar-ninja WIN32
         src/explorer_dll.h
         src/background.cpp
         src/background.h
+        src/files.cpp
+        src/files.h
 )
 
 target_compile_definitions(taskbar-ninja PRIVATE
@@ -65,6 +67,8 @@ add_library(taskbar-ninja-explorer SHARED
         src/explorer_dll.def # exports: DllGetClassObject needs PRIVATE, which dllexport cannot give
         src/log.cpp
         src/log.h
+        src/files.cpp
+        src/files.h
 )
 
 target_compile_definitions(taskbar-ninja-explorer PRIVATE

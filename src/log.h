@@ -31,12 +31,6 @@ namespace ninja {
     void set_log_role(std::wstring_view role);
 
     /**
-     * Makes the taskbar-ninja folder in APPDATA.
-     * @return folder path, or empty when APPDATA is unset or too long
-     */
-    [[nodiscard]] std::wstring app_data_folder();
-
-    /**
      * Moves a log over 1 MiB to log.old.txt.
      * @remarks Replaces an older log.old.txt.
      */

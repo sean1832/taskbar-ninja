@@ -9,6 +9,7 @@
 #include <string>
 #include <string_view>
 
+#include "files.h"
 #include "log.h"
 
 namespace ninja {
@@ -153,7 +154,7 @@ namespace ninja {
     } // namespace
 
     std::wstring write_default_config() {
-        std::wstring folder = app_data_folder();
+        std::wstring folder = appdata_folder();
         if (folder.empty()) {
             return {};
         }
