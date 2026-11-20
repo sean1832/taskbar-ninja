@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="hood" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4d5488"/>
+      <stop offset="1" stop-color="#2b2f50"/>
+    </linearGradient>
+    <linearGradient id="band" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5cb8ff"/>
+      <stop offset="1" stop-color="#2f7bf6"/>
+    </linearGradient>
+    <clipPath id="hood-shape">
+      <rect x="14" y="46" width="196" height="196" rx="60"/>
+    </clipPath>
+  </defs>
+
+  <!-- headband tails -->
+  <path d="M202 94 C222 84 234 60 250 42 C251 72 240 98 212 113 Z" fill="#2f7bf6"/>
+  <path d="M204 106 C226 110 240 104 254 113 C244 131 226 133 206 121 Z" fill="#1d5fd6"/>
+
+  <!-- hood -->
+  <rect x="14" y="46" width="196" height="196" rx="60" fill="url(#hood)"/>
+
+  <g clip-path="url(#hood-shape)">
+    <!-- headband, drawn as a taskbar -->
+    <rect x="14" y="88" width="196" height="34" fill="url(#band)"/>
+    <!-- eye slit -->
+    <rect x="36" y="132" width="152" height="50" rx="25" fill="#ffd9b5"/>
+  </g>
+
+  <!-- taskbar icons -->
+  <rect x="84" y="98" width="14" height="14" rx="4" fill="#ffffff"/>
+  <rect x="105" y="98" width="14" height="14" rx="4" fill="#ffffff"/>
+  <rect x="126" y="98" width="14" height="14" rx="4" fill="#ffffff"/>
+
+  <!-- headband knot -->
+  <ellipse cx="209" cy="105" rx="11" ry="15" fill="#1d5fd6"/>
+
+  <!-- eyes -->
+  <path d="M70 144 L98 152 V158 A14 14 0 0 1 70 158 Z" fill="#161824"/>
+  <path d="M154 144 L126 152 V158 A14 14 0 0 0 154 158 Z" fill="#161824"/>
+</svg>
