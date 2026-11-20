@@ -98,6 +98,10 @@ The build writes `taskbar-ninja.exe` and `taskbar-ninja-explorer.dll` to `build/
 
 If the link step fails because `taskbar-ninja-explorer.dll` is in use, restart Explorer and build again.
 
+## Acknowledgements
+- [Per-Monitor Taskbar](https://github.com/nikoleinonen/per-monitor-taskbar) by Leiksa, MIT License. Hide and show of each taskbar, the work area, and crash recovery.
+- [TranslucentTB](https://github.com/TranslucentTB/TranslucentTB), GPL-3.0. Loading the dll into Explorer, the taskbar XAML element names, the blur brush, and Start and search detection.
+
 ## License
 ```
 Taskbar Ninja - auto-hide and restyle the Windows 11 taskbar
