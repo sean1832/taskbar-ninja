@@ -15,7 +15,7 @@ namespace ninja {
      */
     enum class TrayCommand : UINT {
         none = 0,             ///< menu closed with no choice
-        toggle_hide = 1,      ///< hide or show the taskbar
+        toggle_pause = 1,     ///< pause or resume hiding and background
         restore_and_exit = 2, ///< show the taskbar and close the app
     };
 
@@ -36,8 +36,8 @@ namespace ninja {
     /**
      * Shows the tray menu at the cursor and waits for a choice.
      * @param window owner window of the menu
-     * @param hiding_enabled puts a check mark on "Hide taskbars" when true
+     * @param paused puts a check mark on "Pause" when true
      * @return chosen command, or none when the menu closed with no choice
      */
-    [[nodiscard]] TrayCommand show_tray_menu(HWND window, bool hiding_enabled);
+    [[nodiscard]] TrayCommand show_tray_menu(HWND window, bool paused);
 } // namespace ninja

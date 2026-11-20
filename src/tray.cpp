@@ -31,16 +31,16 @@ namespace ninja {
         Shell_NotifyIconW(NIM_DELETE, &icon);
     }
 
-    TrayCommand show_tray_menu(HWND window, bool hiding_enabled) {
-        UINT hide_flags = MF_STRING;
-        if (hiding_enabled) {
-            hide_flags |= MF_CHECKED;
+    TrayCommand show_tray_menu(HWND window, bool paused) {
+        UINT pause_flags = MF_STRING;
+        if (paused) {
+            pause_flags |= MF_CHECKED;
         }
 
         HMENU menu = CreatePopupMenu();
-        AppendMenuW(menu, hide_flags, static_cast<UINT_PTR>(TrayCommand::toggle_hide), L"Hide taskbars");
+        AppendMenuW(menu, pause_flags, static_cast<UINT_PTR>(TrayCommand::toggle_pause), L"Pause");
         AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-        AppendMenuW(menu, MF_STRING, static_cast<UINT_PTR>(TrayCommand::restore_and_exit), L"Restore and exit");
+        AppendMenuW(menu, MF_STRING, static_cast<UINT_PTR>(TrayCommand::restore_and_exit), L"Exit");
 
         POINT cursor = {};
         GetCursorPos(&cursor);
@@ -56,7 +56,7 @@ namespace ninja {
 
         switch (const auto chosen = static_cast<TrayCommand>(chosen_id)) {
         case TrayCommand::none:
-        case TrayCommand::toggle_hide:
+        case TrayCommand::toggle_pause:
         case TrayCommand::restore_and_exit:
             return chosen;
         }

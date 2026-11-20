@@ -55,8 +55,8 @@ namespace ninja {
          */
         struct AppState {
             HWND window = nullptr;
-            // tray switch; off = every taskbar shows
-            bool hiding_enabled = true;
+            // tray pause switch; true = every taskbar shows, original background
+            bool paused = false;
             std::wstring config_path;
             // nullptr = no live reload
             HANDLE config_watch = nullptr;
@@ -182,9 +182,9 @@ namespace ninja {
             append_log(LogLevel::info, L"work_area_covered", {{L"monitor", model_name}});
         }
 
-        // true when hiding is on and at least one monitor auto-hides a taskbar
+        // true when not paused and at least one monitor auto-hides a taskbar
         bool should_read_mouse(const AppState& state) {
-            if (!state.hiding_enabled) {
+            if (state.paused) {
                 return false;
             }
             for (const MonitorState& monitor_state : state.monitors) {
@@ -255,7 +255,7 @@ namespace ninja {
         // does not want shown, shows the others, then fixes the timer
         void apply_hiding(AppState& state) {
             for (MonitorState& monitor_state : state.monitors) {
-                bool is_auto_hiding = state.hiding_enabled && monitor_state.settings.auto_hide;
+                bool is_auto_hiding = !state.paused && monitor_state.settings.auto_hide;
                 // cover first, so a taskbar that shows below knows to go topmost
                 bool should_cover = is_auto_hiding && monitor_state.settings.cover_taskbar_area;
                 set_work_area_covered(monitor_state, should_cover);
@@ -309,6 +309,12 @@ namespace ninja {
                 append_log(LogLevel::info, L"background_changed", {
                     {L"style", std::wstring(background_style_name(settings.style))}
                 });
+            }
+
+            // paused: revert to original look until resume
+            if (state.paused) {
+                restore_background();
+                return;
             }
 
             if (settings.style == BackgroundStyle::original) {
@@ -551,13 +557,14 @@ namespace ninja {
                 return;
             }
 
-            TrayCommand command = show_tray_menu(state.window, state.hiding_enabled);
+            TrayCommand command = show_tray_menu(state.window, state.paused);
             switch (command) {
             case TrayCommand::none:
                 return;
-            case TrayCommand::toggle_hide:
-                state.hiding_enabled = !state.hiding_enabled;
+            case TrayCommand::toggle_pause:
+                state.paused = !state.paused;
                 apply_hiding(state);
+                apply_background(state);
                 return;
             case TrayCommand::restore_and_exit:
                 exit_app(state);
