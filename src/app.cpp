@@ -24,6 +24,9 @@
 
 namespace ninja {
     namespace {
+        // App Version
+        constexpr wchar_t app_version[] = L"dev";
+
         // Local\ = one per signed-in user session
         constexpr wchar_t single_instance_mutex_name[] = L"Local\\taskbar-ninja";
 
@@ -81,6 +84,10 @@ namespace ninja {
 
         AppState* app_state_of(HWND window) {
             return reinterpret_cast<AppState*>(GetWindowLongPtrW(window, GWLP_USERDATA));
+        }
+
+        std::wstring make_tray_tooltip() {
+            return std::wstring(L"Taskbar Ninja (") + app_version + L')';
         }
 
         // settings of the same monitor in the old list; built-in values for a new monitor
@@ -542,7 +549,7 @@ namespace ninja {
         // Explorer restarted: empty tray, new visible taskbar
         void on_taskbar_created(AppState& state) {
             append_log(LogLevel::info, L"taskbar_created");
-            if (!add_tray_icon(state.window, L"Taskbar Ninja")) {
+            if (!add_tray_icon(state.window, make_tray_tooltip().c_str())) {
                 append_log(LogLevel::warning, L"tray_icon_rejected");
             }
 
@@ -722,7 +729,7 @@ namespace ninja {
             return ExitCode::startup_failed;
         }
 
-        if (!add_tray_icon(window, L"Taskbar Ninja")) {
+        if (!add_tray_icon(window, make_tray_tooltip().c_str())) {
             append_log(LogLevel::warning, L"tray_icon_rejected");
         }
 
