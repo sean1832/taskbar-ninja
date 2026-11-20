@@ -32,12 +32,4 @@ Copy-Item build-release/Release/taskbar-ninja.exe, build-release/Release/taskbar
 # one wrapping folder inside the zip
 Compress-Archive -Path "$stage/*" -DestinationPath "dist/$stage_name.zip"
 
-# checksums, sha256sum format
-$lines = foreach ($file in Get-ChildItem dist -Filter *.zip) {
-    $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLower()
-    "$hash  $($file.Name)"
-}
-# LF endings, so sha256sum -c works on Linux too
-[System.IO.File]::WriteAllText((Join-Path $PWD 'dist/SHA256SUMS.txt'), (($lines -join "`n") + "`n"))
-
 Write-Output "version=$Version zip=dist/$stage_name.zip"
