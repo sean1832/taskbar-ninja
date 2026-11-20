@@ -7,6 +7,7 @@
 #include <optional>
 #include <vector>
 
+#include "autostart.h"
 #include "background.h"
 #include "config.h"
 #include "edge.h"
@@ -565,7 +566,9 @@ namespace ninja {
                 return;
             }
 
-            TrayCommand command = show_tray_menu(state.window, state.paused);
+            // read everytime since user can change this outside the app
+            const bool autostart_enabled = is_autostart_enabled();
+            TrayCommand command = show_tray_menu(state.window, state.paused, autostart_enabled);
             switch (command) {
             case TrayCommand::none:
                 return;
@@ -578,6 +581,22 @@ namespace ninja {
                 INT_PTR result = 0;
                 if (!open_path(config_path(), &result)) {
                     append_log(LogLevel::error, L"open_config_file", {{L"shell_error", std::to_wstring(result)}});
+                }
+                return;
+            }
+            case TrayCommand::toggle_autostart: {
+                const bool enabled = !autostart_enabled;
+                std::wstring enabled_text = L"false";
+                if (enabled) {
+                    enabled_text = L"true";
+                }
+
+                const LSTATUS status = set_autostart(enabled);
+                if (status != ERROR_SUCCESS) {
+                    append_log(LogLevel::error, L"autostart_not_set", {
+                        {L"enabled", enabled_text},
+                        {L"win32_error", std::to_wstring(GetLastError())},
+                    });
                 }
                 return;
             }

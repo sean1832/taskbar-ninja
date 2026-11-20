@@ -30,6 +30,7 @@
 |---|---|
 | Pause | Shows every taskbar and restores the original background. Click again to resume. |
 | Config | Opens `config.ini`. |
+| Start With Windows | Starts the app when you sign in. Click again to stop. |
 | Exit | Restores the taskbar and background, then closes the app. |
 
 ### Config
