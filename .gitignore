@@ -1,6 +1,8 @@
 # custom ignore
 tmp/
 build/
+build-*/
+dist/
 
 plan.md
 

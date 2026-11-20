@@ -1,0 +1,62 @@
+﻿name: Release
+
+on:
+  release:
+    types: [published] # releases and pre-releases, not drafts
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag, e.g. v1.2.0"
+        required: true
+        type: string
+
+permissions:
+  contents: read # release job raises it
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false # never kill a half-uploaded release
+
+jobs:
+  release:
+    runs-on: windows-2025
+    permissions:
+      contents: write # upload assets; build has no third-party code
+    steps:
+      - name: Resolve release tag
+        id: version
+        shell: bash
+        env:
+          TAG: ${{ github.event.release.tag_name || inputs.tag }} # env, not inline: tag text is untrusted
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # v is optional: v1.2.0 and 1.2.0 both pass
+          semver='^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$'
+          if [[ ! "$TAG" =~ $semver ]]; then
+            echo "::error::release tag must match [v]<major>.<minor>.<patch>[-prerelease], got '$TAG'"
+            exit 1
+          fi
+          # release must exist, matters for manual runs
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      # tag, not branch head, so manual runs build the tagged code
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ steps.version.outputs.tag }}
+          persist-credentials: false
+
+      - name: Build and package
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: pwsh scripts/build-release.ps1 $env:VERSION
+
+      - name: Upload release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber # clobber: re-runs replace old files
