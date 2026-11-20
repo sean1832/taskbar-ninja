@@ -71,7 +71,14 @@ If a value is out of range, the app keeps the last good settings and writes the 
 | `taskbar-ninja.exe --configs` | Opens `%APPDATA%\taskbar-ninja` in Explorer. |
 
 ### The Explorer dll
-To change the background, the app loads `taskbar-ninja-explorer.dll` into `explorer.exe`. Explorer keeps the dll loaded until Explorer restarts. Before you update or delete the dll, restart Explorer (Task Manager > Windows Explorer > Restart).
+To change the background, the app loads `taskbar-ninja-explorer.dll` into `explorer.exe`. Explorer keeps the dll loaded until Explorer restarts. Before you update or delete the dll, restart Explorer (`Task Manager > Windows Explorer > Restart`).
+
+### Emergency restore
+If the taskbar stays hidden or the app stops responding, try these in order:
+
+1. Press `Ctrl + Alt + Shift + T`. The watchdog closes the app and restores the taskbar and background. This works while the app runs, even when it is frozen.
+2. Press `Win + R` and run `"C:\path\to\taskbar-ninja.exe" --restore`. Use this if the hotkey does nothing, for example after the app closed.
+3. Restart Explorer: press `Ctrl + Shift + Esc`, select **Windows Explorer**, then **Restart**. Explorer makes a new taskbar with the original look.
 
 ## Building from source
 ### Prerequisites
