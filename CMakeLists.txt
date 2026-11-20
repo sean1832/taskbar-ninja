@@ -12,6 +12,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # static runtime: exe needs no runtime dlls
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
+# app version; CI sets it from the git tag, for example -DTASKBAR_NINJA_VERSION=1.2.0
+set(TASKBAR_NINJA_VERSION "dev" CACHE STRING "version shown in the tray tooltip")
+
 # WIN32 = no console window
 add_executable(taskbar-ninja WIN32
         src/main.cpp
@@ -53,6 +56,7 @@ target_compile_definitions(taskbar-ninja PRIVATE
         WIN32_LEAN_AND_MEAN # exclude rarely-used stuff from Windows headers (smaller windows.h)
         NOMINMAX # prevent windows.h from defining min/max macros (conflicts with std::min/max)
         _WIN32_WINNT=0x0A00 # Windows 10+ API
+        TASKBAR_NINJA_VERSION=L"${TASKBAR_NINJA_VERSION}" # version wstring
 )
 
 target_link_libraries(taskbar-ninja PRIVATE user32 shell32 dwmapi)

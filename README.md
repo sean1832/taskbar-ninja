@@ -96,6 +96,14 @@ cmake --build build --config Release
 
 The build writes `taskbar-ninja.exe` and `taskbar-ninja-explorer.dll` to `build/Release`.
 
+The tray tooltip shows the version. It is `dev` unless you set it when you configure:
+
+```bash
+cmake -B build -G "Visual Studio 17 2022" -A x64 -DTASKBAR_NINJA_VERSION=1.2.0
+```
+
+CMake keeps this value in `build`. To change it, run the command again with a new value, or delete `build`.
+
 If the link step fails because `taskbar-ninja-explorer.dll` is in use, restart Explorer and build again.
 
 ## Acknowledgements

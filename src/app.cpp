@@ -25,7 +25,7 @@
 namespace ninja {
     namespace {
         // App Version
-        constexpr wchar_t app_version[] = L"dev";
+        constexpr wchar_t app_version[] = TASKBAR_NINJA_VERSION;
 
         // Local\ = one per signed-in user session
         constexpr wchar_t single_instance_mutex_name[] = L"Local\\taskbar-ninja";
