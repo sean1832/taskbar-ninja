@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(taskbar_ninja LANGUAGES CXX)
+project(taskbar_ninja LANGUAGES CXX RC) # RC = resource compiler for the tray icon
 
 if(NOT MSVC)
     message(FATAL_ERROR "compiler must be MSVC (CLion: Visual Studio toolchain)")
@@ -48,6 +48,7 @@ add_executable(taskbar-ninja WIN32
         src/background.h
         src/files.cpp
         src/files.h
+        resources/app.rc # app icon
 )
 
 target_compile_definitions(taskbar-ninja PRIVATE

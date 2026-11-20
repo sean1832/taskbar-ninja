@@ -1,0 +1,2 @@
+// app icon; lowest id, so Explorer shows it for the exe
+1 ICON "icon.ico"

@@ -7,6 +7,9 @@ namespace ninja {
     namespace {
         // one icon per window; id tells icons of the same window apart
         constexpr UINT tray_icon_id = 1;
+
+        // icon id in resource/app.rc
+        constexpr WORD app_icon_id = 1;
     } // namespace
 
     bool add_tray_icon(HWND window, const wchar_t* tooltip) {
@@ -16,7 +19,13 @@ namespace ninja {
         icon.uID = tray_icon_id;
         icon.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
         icon.uCallbackMessage = tray_message;
-        icon.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
+
+        // small icon size, so the tray icon isn't shrunk from a large one
+        // LR_SHARED: Windows owns the handle, no DestroyIcon
+        const int width_pixels = GetSystemMetrics(SM_CXSMICON);
+        const int height_pixels = GetSystemMetrics(SM_CYSMICON);
+        icon.hIcon = static_cast<HICON>(LoadImageW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(app_icon_id),
+            IMAGE_ICON, width_pixels, height_pixels, LR_SHARED));
 
         // copies and cuts to fit szTip
         lstrcpynW(icon.szTip, tooltip, ARRAYSIZE(icon.szTip));
