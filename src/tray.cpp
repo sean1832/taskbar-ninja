@@ -39,6 +39,7 @@ namespace ninja {
 
         HMENU menu = CreatePopupMenu();
         AppendMenuW(menu, pause_flags, static_cast<UINT_PTR>(TrayCommand::toggle_pause), L"Pause");
+        AppendMenuW(menu, MF_STRING, static_cast<UINT_PTR>(TrayCommand::open_config_file), L"Config");
         AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(menu, MF_STRING, static_cast<UINT_PTR>(TrayCommand::restore_and_exit), L"Exit");
 
@@ -58,6 +59,7 @@ namespace ninja {
         case TrayCommand::none:
         case TrayCommand::toggle_pause:
         case TrayCommand::restore_and_exit:
+        case TrayCommand::open_config_file:
             return chosen;
         }
         // unknown id: treat as no choice

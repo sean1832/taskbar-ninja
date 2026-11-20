@@ -153,12 +153,19 @@ namespace ninja {
         }
     } // namespace
 
-    std::wstring write_default_config() {
-        std::wstring folder = appdata_folder();
+    std::wstring config_path() {
+        const std::wstring folder = appdata_folder();
         if (folder.empty()) {
             return {};
         }
-        std::wstring path = folder + L"\\config.ini";
+        return folder + L"\\config.ini";
+    }
+
+    std::wstring write_default_config() {
+        std::wstring path = config_path();
+        if (path.empty()) {
+            return {};
+        }
 
         // CREATE_NEW: fails when the file exists, so the file of the user stays
         HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);

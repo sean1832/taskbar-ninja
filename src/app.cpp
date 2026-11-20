@@ -11,6 +11,7 @@
 #include "config.h"
 #include "edge.h"
 #include "exit_code.h"
+#include "files.h"
 #include "hold.h"
 #include "log.h"
 #include "monitor.h"
@@ -566,6 +567,13 @@ namespace ninja {
                 apply_hiding(state);
                 apply_background(state);
                 return;
+            case TrayCommand::open_config_file: {
+                INT_PTR result = 0;
+                if (!open_path(config_path(), &result)) {
+                    append_log(LogLevel::error, L"open_config_file", {{L"shell_error", std::to_wstring(result)}});
+                }
+                return;
+            }
             case TrayCommand::restore_and_exit:
                 exit_app(state);
                 return;

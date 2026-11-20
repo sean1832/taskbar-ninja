@@ -35,6 +35,12 @@ namespace ninja {
     };
 
     /**
+     * Get the config.ini path in appdata folder
+     * @return config.ini path
+     */
+    [[nodiscard]] std::wstring config_path();
+
+    /**
      * Writes config.ini with the default settings when the file does not exist yet.
      * @return config file path, or empty when APPDATA is unset
      * @remarks Never overwrites the file of the user.
