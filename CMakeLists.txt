@@ -49,6 +49,8 @@ add_executable(taskbar-ninja WIN32
         src/files.cpp
         src/files.h
         resources/app.rc # app icon
+        src/autostart.cpp
+        src/autostart.h
 )
 
 target_compile_definitions(taskbar-ninja PRIVATE
@@ -60,7 +62,9 @@ target_compile_definitions(taskbar-ninja PRIVATE
         TASKBAR_NINJA_VERSION=L"${TASKBAR_NINJA_VERSION}" # version wstring
 )
 
-target_link_libraries(taskbar-ninja PRIVATE user32 shell32 dwmapi)
+# advapi32: registry
+# dwmapi: DwmGetWindowAttribute for taskbar background color
+target_link_libraries(taskbar-ninja PRIVATE user32 shell32 dwmapi advapi32)
 
 target_compile_options(taskbar-ninja PRIVATE /W4 /WX /permissive- /utf-8)
 
