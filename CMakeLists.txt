@@ -75,8 +75,8 @@ target_compile_definitions(taskbar-ninja-explorer PRIVATE
         _WIN32_WINNT=0x0A00
 )
 
-# windowsapp: c++/WinRT, oleaut32: BSTR
-target_link_libraries(taskbar-ninja-explorer PRIVATE user32 oleaut32 windowsapp)
+# windowsapp: c++/WinRT, oleaut32: BSTR, dxguid: Direct2D effect ids
+target_link_libraries(taskbar-ninja-explorer PRIVATE user32 oleaut32 windowsapp dxguid)
 
 # bigobj: winrt headers make too many sections for the default obj format
 target_compile_options(taskbar-ninja-explorer PRIVATE /W4 /WX /permissive- /utf-8 /bigobj)

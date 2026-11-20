@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include <atomic>
+#include <mutex>
 #include <string>
 
 #include "explorer_dll.h"
@@ -14,8 +15,11 @@ namespace ninja {
         constexpr DWORD max_ready_wait_ms = 35000;
         constexpr UINT taskbar_message_timeout_ms = 2000;
 
-        // false after a restore, so a slow load cannot clear again
-        std::atomic<bool> is_clear_wanted = false;
+        // false after a restore, so a slow load cannot apply a look again
+        std::atomic<bool> is_look_wanted = false;
+        // last look from set_background, for the load worker
+        std::mutex wanted_look_mutex;
+        BackgroundLook wanted_look;
         // one load at a time
         std::atomic<bool> is_loading = false;
 
@@ -138,25 +142,53 @@ namespace ninja {
             return is_ready;
         }
 
+        // false when the dll has not made the memory, so no Explorer has the dll
+        bool send_look(const BackgroundLook& look) {
+            HANDLE look_memory = OpenFileMappingW(FILE_MAP_WRITE, FALSE, explorer_look_memory_name);
+            if (look_memory == nullptr) {
+                return false;
+            }
+            auto* shared_look = static_cast<BackgroundLook*>(
+                MapViewOfFile(look_memory, FILE_MAP_WRITE, 0, 0, sizeof(BackgroundLook)));
+            if (shared_look == nullptr) {
+                CloseHandle(look_memory);
+                return false;
+            }
+            *shared_look = look;
+            UnmapViewOfFile(shared_look);
+            CloseHandle(look_memory);
+            // look first, then the event, so the dll reads the new look
+            return set_explorer_event(explorer_apply_event_name);
+        }
+
         DWORD WINAPI run_load_worker(void*) {
             bool is_ready = load_explorer_dll();
             // a restore during the load wins
-            if (is_ready && is_clear_wanted) {
-                set_explorer_event(explorer_clear_event_name);
+            if (is_ready && is_look_wanted) {
+                BackgroundLook look;
+                {
+                    std::lock_guard lock(wanted_look_mutex);
+                    look = wanted_look;
+                }
+                send_look(look);
             }
             is_loading = false;
             return 0;
         }
     } // namespace
 
-    void clear_background() {
-        is_clear_wanted = true;
+    void set_background(const BackgroundLook& look) {
+        {
+            std::lock_guard lock(wanted_look_mutex);
+            wanted_look = look;
+        }
+        is_look_wanted = true;
         if (is_explorer_ready()) {
-            set_explorer_event(explorer_clear_event_name);
+            send_look(look);
             return;
         }
 
-        // a running load clears when it is done
+        // a running load applies the wanted look when it is done
         bool was_loading = is_loading.exchange(true);
         if (was_loading) {
             return;
@@ -173,7 +205,7 @@ namespace ninja {
     }
 
     void restore_background() {
-        is_clear_wanted = false;
+        is_look_wanted = false;
         // no event: no Explorer has the dll, so every background is original
         set_explorer_event(explorer_restore_event_name);
     }

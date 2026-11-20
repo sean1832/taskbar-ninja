@@ -9,6 +9,7 @@
 
 #include "background.h"
 #include "config.h"
+#include "edge.h"
 #include "exit_code.h"
 #include "hold.h"
 #include "log.h"
@@ -62,7 +63,7 @@ namespace ninja {
             // last seen write time of the config file; 0 = file missing
             ULONGLONG config_write_time = 0;
             std::vector<MonitorState> monitors;
-            BackgroundStyle background_style = BackgroundStyle::original; // background from the config
+            BackgroundSettings background_settings; // background from the config, the last good one
             bool mouse_timer_running = false;
             HANDLE watchdog_process = nullptr;
             int watchdog_restart_count = 0;
@@ -267,28 +268,58 @@ namespace ninja {
             apply_mouse_timer(state);
         }
 
+        // one look for every taskbar, so the first taskbar sets the feather direction
+        TaskbarEdge resolve_background_edge(const AppState& state) {
+            for (const MonitorState& monitor_state : state.monitors) {
+                HWND taskbar = monitor_state.monitor.taskbar;
+                if (taskbar == nullptr) {
+                    continue;
+                }
+                RECT taskbar_bounds_pixels = {};
+                GetWindowRect(taskbar, &taskbar_bounds_pixels);
+                return resolve_taskbar_edge(monitor_state.monitor.bounds_pixels, taskbar_bounds_pixels);
+            }
+            return TaskbarEdge::bottom;
+        }
+
+        BackgroundLook make_background_look(const BackgroundSettings& settings, TaskbarEdge edge) {
+            BackgroundLook look;
+            look.style = settings.style;
+            look.color_argb = settings.color_argb;
+            look.blur_pixels = static_cast<float>(settings.blur_pixels);
+            if (settings.feather) {
+                look.feather_fraction = static_cast<float>(settings.feather_percent) / 100.0f;
+            }
+            look.edge = edge;
+            return look;
+        }
+
+        // rejected settings: the last good ones
         void apply_background(AppState& state) {
-            BackgroundStyle style = read_background_style(state.config_path);
-            bool is_changed = style != state.background_style;
-            state.background_style = style;
+            std::optional<BackgroundSettings> read_settings = read_background_settings(state.config_path);
+            BackgroundSettings settings = state.background_settings;
+            if (read_settings.has_value()) {
+                settings = *read_settings;
+            } else {
+                append_log(LogLevel::warning, L"background_settings_rejected");
+            }
+            bool is_changed = settings != state.background_settings;
+            state.background_settings = settings;
             if (is_changed) {
                 append_log(LogLevel::info, L"background_changed", {
-                    {L"style", std::wstring(background_style_name(style))}
+                    {L"style", std::wstring(background_style_name(settings.style))}
                 });
             }
 
-            switch (style) {
-            case BackgroundStyle::original:
+            if (settings.style == BackgroundStyle::original) {
                 // only on a change: Explorer draws the original by itself
                 if (is_changed) {
                     restore_background();
                 }
                 return;
-            case BackgroundStyle::clear:
-                // also without a change: a new Explorer or a new taskbar needs it
-                clear_background();
-                return;
             }
+            // also without a change: a new Explorer or a new taskbar needs it
+            set_background(make_background_look(settings, resolve_background_edge(state)));
         }
 
         void rebuild_monitors(AppState& state) {

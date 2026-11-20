@@ -2,7 +2,9 @@
 
 #include <windows.h>
 
+#include <cstdint>
 #include <cwchar>
+#include <cwctype>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -19,16 +21,10 @@ namespace ninja {
         constexpr int min_hot_zone_pixels = 1;
         constexpr int max_hot_zone_pixels = 50;
 
-        struct BackgroundStyleName {
-            BackgroundStyle style;
-            const wchar_t* name;
-        };
-
-        // one source for the config words and the error text
-        constexpr BackgroundStyleName background_style_names[] = {
-            {BackgroundStyle::original, L"original"},
-            {BackgroundStyle::clear, L"clear"},
-        };
+        constexpr int min_blur_pixels = 1;
+        constexpr int max_blur_pixels = 50;
+        constexpr int min_feather_percent = 1;
+        constexpr int max_feather_percent = 100;
 
         // ASCII only: the profile API reads ASCII and UTF-8 files the same way
         constexpr char default_config_text[] =
@@ -40,8 +36,15 @@ namespace ninja {
             "show_delay_ms = 0\r\n"
             "hide_delay_ms = 300\r\n"
             "hot_zone_pixels = 2\r\n"
-            "; 'original', 'clear'. every taskbar, read from [default] only\r\n"
-            "background = original\r\n";
+            "; background of every taskbar, read from [default] only\r\n"
+            "; original, clear, tint, acrylic or blur\r\n"
+            "background = original\r\n"
+            "; AARRGGBB in hex, for tint, acrylic and blur\r\n"
+            "background_color = 40202020\r\n"
+            "background_blur_pixels = 10\r\n"
+            "; blur fades in from the inner edge, over this part of the bar thickness\r\n"
+            "background_feather = false\r\n"
+            "background_feather_percent = 50\r\n";
 
 
         // where values come from, and whether one was rejected
@@ -108,6 +111,45 @@ namespace ninja {
                 L", " + std::to_wstring(max) + L"]");
             return fallback;
         }
+
+        BackgroundStyle read_style(SettingsSource& source, const wchar_t* key, BackgroundStyle fallback) {
+            std::wstring text = read_text(source, key);
+            if (text.empty()) {
+                return fallback;
+            }
+            for (const BackgroundStyleName& entry : background_style_names) {
+                if (_wcsicmp(text.c_str(), entry.name) == 0) {
+                    return entry.style;
+                }
+            }
+
+            std::wstring message = std::wstring(key) + L" must be one of";
+            for (const BackgroundStyleName& entry : background_style_names) {
+                message += L" ";
+                message += entry.name;
+            }
+            reject_value(source, message);
+            return fallback;
+        }
+
+        // exactly 8 hex digits: wcstoul alone would take 0x, a sign, or spaces
+        std::uint32_t read_color(SettingsSource& source, const wchar_t* key, std::uint32_t fallback) {
+            std::wstring text = read_text(source, key);
+            if (text.empty()) {
+                return fallback;
+            }
+            bool is_color = text.size() == 8;
+            for (wchar_t character : text) {
+                if (!std::iswxdigit(character)) {
+                    is_color = false;
+                }
+            }
+            if (is_color) {
+                return static_cast<std::uint32_t>(std::wcstoul(text.c_str(), nullptr, 16));
+            }
+            reject_value(source, std::wstring(key) + L" must be 8 hex digits, AARRGGBB");
+            return fallback;
+        }
     } // namespace
 
     std::wstring write_default_config() {
@@ -157,40 +199,27 @@ namespace ninja {
         return settings;
     }
 
-    BackgroundStyle read_background_style(const std::wstring& config_path) {
+    std::optional<BackgroundSettings> read_background_settings(const std::wstring& config_path) {
+        BackgroundSettings default_settings;
+        // no file path: an empty path makes windows read from its own folder
         if (config_path.empty()) {
-            return BackgroundStyle::original;
+            return default_settings;
         }
+
         // empty model name: [default] only
         std::wstring no_model_name;
         SettingsSource source = {config_path, no_model_name};
-        std::wstring text = read_text(source, L"background");
-        if (text.empty()) {
-            return BackgroundStyle::original;
-        }
+        BackgroundSettings settings;
+        settings.style = read_style(source, L"background", default_settings.style);
+        settings.color_argb = read_color(source, L"background_color", default_settings.color_argb);
+        settings.blur_pixels = read_int(source, L"background_blur_pixels", min_blur_pixels, max_blur_pixels, default_settings.blur_pixels);
+        settings.feather = read_bool(source, L"background_feather", default_settings.feather);
+        settings.feather_percent = read_int(source, L"background_feather_percent", min_feather_percent, max_feather_percent, default_settings.feather_percent);
 
-        for (const BackgroundStyleName& entry : background_style_names) {
-            if (_wcsicmp(text.c_str(), entry.name) == 0) {
-                return entry.style;
-            }
+        if (source.has_rejected_value) {
+            return std::nullopt;
         }
-
-        std::wstring message = L"background must be one of";
-        for (const BackgroundStyleName& entry : background_style_names) {
-            message += L" ";
-            message += entry.name;
-        }
-        reject_value(source, message);
-        return BackgroundStyle::original;
-    }
-
-    std::wstring_view background_style_name(BackgroundStyle style) {
-        for (const BackgroundStyleName& entry : background_style_names) {
-            if (entry.style == style) {
-                return entry.name;
-            }
-        }
-        return L"unknown";
+        return settings;
     }
 
     HANDLE start_config_watch(const std::wstring& config_path) {

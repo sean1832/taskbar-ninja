@@ -2,9 +2,11 @@
 
 #include <windows.h>
 
+#include <cstdint>
 #include <optional>
 #include <string>
-#include <string_view>
+
+#include "explorer_dll.h"
 
 namespace ninja {
 
@@ -20,11 +22,16 @@ namespace ninja {
     };
 
     /**
-     * Look of the background of every taskbar.
+     * Settings for the background of every taskbar.
      */
-    enum class BackgroundStyle {
-        original, ///< what Explorer draws
-        clear,    ///< no background, the desktop shows through
+    struct BackgroundSettings {
+        BackgroundStyle style = BackgroundStyle::original;
+        std::uint32_t color_argb = 0x40202020; ///< tint, acrylic and blur color, AARRGGBB
+        int blur_pixels = 10;                  ///< blur strength
+        bool feather = false;                  ///< blur fades in from the inner edge
+        int feather_percent = 50;              ///< part of the bar thickness the blur fades in over
+
+        bool operator==(const BackgroundSettings&) const = default;
     };
 
     /**
@@ -44,19 +51,12 @@ namespace ninja {
     [[nodiscard]] std::optional<MonitorSettings> read_monitor_settings(const std::wstring& config_path, const std::wstring& model_name);
 
     /**
-     * Reads the background style of every taskbar.
+     * Reads the background settings of every taskbar from [default], then from the built-in values.
      * @param config_path path from write_default_config
-     * @return background from [default], or original when it is missing or breaks its rule
-     * @remarks One style for every taskbar. A monitor section does not override it.
+     * @return settings, or nullopt when a value breaks its rule
+     * @remarks One look for every taskbar. A monitor section does not override it. Logs one line for each rejected value.
      */
-    [[nodiscard]] BackgroundStyle read_background_style(const std::wstring& config_path);
-
-    /**
-     * Gives the config word of a background style.
-     * @param style background style
-     * @return word as written in config.ini, for example clear
-     */
-    [[nodiscard]] std::wstring_view background_style_name(BackgroundStyle style);
+    [[nodiscard]] std::optional<BackgroundSettings> read_background_settings(const std::wstring& config_path);
 
     /**
      * Starts watching the config folder for written and renamed files.

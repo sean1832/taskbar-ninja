@@ -1,11 +1,14 @@
 ﻿#pragma once
 
+#include "explorer_dll.h"
+
 namespace ninja {
     /**
-     * Makes the background of every taskbar clear.
+     * Gives the background of every taskbar a look.
+     * @param look style and its options
      * @remarks Returns at once. A worker thread loads the explorer dll first when Explorer does not have it yet.
      */
-    void clear_background();
+    void set_background(const BackgroundLook& look);
 
     /**
      * Puts the original background back on every taskbar.
