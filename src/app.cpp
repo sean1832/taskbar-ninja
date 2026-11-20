@@ -549,6 +549,7 @@ namespace ninja {
                 if (wparam == SPI_SETWORKAREA) {
                     start_work_area_timer(*state);
                 }
+                return 0;
             case WM_DISPLAYCHANGE:
                 // monitor added or removed, or a new resolution
                 append_log(LogLevel::info, L"display_changed");
