@@ -10,6 +10,7 @@
 
 #include "log.h"
 #include "panel.h"
+#include "background.h"
 
 #include "workarea.h"
 
@@ -123,6 +124,7 @@ namespace ninja {
 
         // backstop for a monitor whose reset was rejected; nothing to do when none is still covered
         reset_all_work_areas();
+        restore_background();
         return restored_count;
     }
 

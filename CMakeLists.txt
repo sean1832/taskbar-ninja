@@ -41,6 +41,8 @@ add_executable(taskbar-ninja WIN32
         src/panel.cpp
         src/panel.h
         src/explorer_dll.h
+        src/background.cpp
+        src/background.h
 )
 
 target_compile_definitions(taskbar-ninja PRIVATE

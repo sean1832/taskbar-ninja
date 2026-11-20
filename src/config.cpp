@@ -5,6 +5,7 @@
 #include <cwchar>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "log.h"
 
@@ -18,6 +19,17 @@ namespace ninja {
         constexpr int min_hot_zone_pixels = 1;
         constexpr int max_hot_zone_pixels = 50;
 
+        struct BackgroundStyleName {
+            BackgroundStyle style;
+            const wchar_t* name;
+        };
+
+        // one source for the config words and the error text
+        constexpr BackgroundStyleName background_style_names[] = {
+            {BackgroundStyle::original, L"original"},
+            {BackgroundStyle::clear, L"clear"},
+        };
+
         // ASCII only: the profile API reads ASCII and UTF-8 files the same way
         constexpr char default_config_text[] =
             "; [default] applies to every monitor. A section named after a monitor overrides it.\r\n"
@@ -27,7 +39,10 @@ namespace ninja {
             "cover_taskbar_area = false\r\n" // need auto_hide = true
             "show_delay_ms = 0\r\n"
             "hide_delay_ms = 300\r\n"
-            "hot_zone_pixels = 2\r\n";
+            "hot_zone_pixels = 2\r\n"
+            "; 'original', 'clear'. every taskbar, read from [default] only\r\n"
+            "background = original\r\n";
+
 
         // where values come from, and whether one was rejected
         struct SettingsSource {
@@ -140,6 +155,42 @@ namespace ninja {
             return std::nullopt;
         }
         return settings;
+    }
+
+    BackgroundStyle read_background_style(const std::wstring& config_path) {
+        if (config_path.empty()) {
+            return BackgroundStyle::original;
+        }
+        // empty model name: [default] only
+        std::wstring no_model_name;
+        SettingsSource source = {config_path, no_model_name};
+        std::wstring text = read_text(source, L"background");
+        if (text.empty()) {
+            return BackgroundStyle::original;
+        }
+
+        for (const BackgroundStyleName& entry : background_style_names) {
+            if (_wcsicmp(text.c_str(), entry.name) == 0) {
+                return entry.style;
+            }
+        }
+
+        std::wstring message = L"background must be one of";
+        for (const BackgroundStyleName& entry : background_style_names) {
+            message += L" ";
+            message += entry.name;
+        }
+        reject_value(source, message);
+        return BackgroundStyle::original;
+    }
+
+    std::wstring_view background_style_name(BackgroundStyle style) {
+        for (const BackgroundStyleName& entry : background_style_names) {
+            if (entry.style == style) {
+                return entry.name;
+            }
+        }
+        return L"unknown";
     }
 
     HANDLE start_config_watch(const std::wstring& config_path) {

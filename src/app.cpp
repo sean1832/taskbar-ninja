@@ -7,6 +7,7 @@
 #include <optional>
 #include <vector>
 
+#include "background.h"
 #include "config.h"
 #include "exit_code.h"
 #include "hold.h"
@@ -61,6 +62,7 @@ namespace ninja {
             // last seen write time of the config file; 0 = file missing
             ULONGLONG config_write_time = 0;
             std::vector<MonitorState> monitors;
+            BackgroundStyle background_style = BackgroundStyle::original; // background from the config
             bool mouse_timer_running = false;
             HANDLE watchdog_process = nullptr;
             int watchdog_restart_count = 0;
@@ -265,9 +267,34 @@ namespace ninja {
             apply_mouse_timer(state);
         }
 
+        void apply_background(AppState& state) {
+            BackgroundStyle style = read_background_style(state.config_path);
+            bool is_changed = style != state.background_style;
+            state.background_style = style;
+            if (is_changed) {
+                append_log(LogLevel::info, L"background_changed", {
+                    {L"style", std::wstring(background_style_name(style))}
+                });
+            }
+
+            switch (style) {
+            case BackgroundStyle::original:
+                // only on a change: Explorer draws the original by itself
+                if (is_changed) {
+                    restore_background();
+                }
+                return;
+            case BackgroundStyle::clear:
+                // also without a change: a new Explorer or a new taskbar needs it
+                clear_background();
+                return;
+            }
+        }
+
         void rebuild_monitors(AppState& state) {
             state.monitors = build_monitor_states(state.config_path, state.monitors);
             apply_hiding(state);
+            apply_background(state);
         }
 
         // a new event during the delay starts the delay again
@@ -659,6 +686,7 @@ namespace ninja {
         state.panels = build_panel_list();
         // after the watchdog, so a crash from here on still restores
         apply_hiding(state);
+        apply_background(state);
 
         for (;;) {
             // missing handles are left out, so the list has no gaps

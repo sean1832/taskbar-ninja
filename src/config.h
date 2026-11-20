@@ -4,6 +4,7 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace ninja {
 
@@ -16,6 +17,14 @@ namespace ninja {
         int show_delay_ms = 0;           ///< time in the hot zone before the taskbar shows
         int hide_delay_ms = 300;         ///< time away from the taskbar before it hides
         int hot_zone_pixels = 2;         ///< thickness of the strip at the taskbar edge
+    };
+
+    /**
+     * Look of the background of every taskbar.
+     */
+    enum class BackgroundStyle {
+        original, ///< what Explorer draws
+        clear,    ///< no background, the desktop shows through
     };
 
     /**
@@ -33,6 +42,21 @@ namespace ninja {
      * @remarks Logs one line for each rejected value.
      */
     [[nodiscard]] std::optional<MonitorSettings> read_monitor_settings(const std::wstring& config_path, const std::wstring& model_name);
+
+    /**
+     * Reads the background style of every taskbar.
+     * @param config_path path from write_default_config
+     * @return background from [default], or original when it is missing or breaks its rule
+     * @remarks One style for every taskbar. A monitor section does not override it.
+     */
+    [[nodiscard]] BackgroundStyle read_background_style(const std::wstring& config_path);
+
+    /**
+     * Gives the config word of a background style.
+     * @param style background style
+     * @return word as written in config.ini, for example clear
+     */
+    [[nodiscard]] std::wstring_view background_style_name(BackgroundStyle style);
 
     /**
      * Starts watching the config folder for written and renamed files.

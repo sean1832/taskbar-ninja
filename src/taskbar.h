@@ -42,7 +42,7 @@ namespace ninja {
     [[nodiscard]] bool is_taskbar_hidden(HWND taskbar);
 
     /**
-     * Shows every hidden taskbar on every monitor.
+     * Shows every hidden taskbar on every monitor and puts back its original background.
      * @return number of taskbars it changed
      * @remarks Needs no saved state and allocates nothing, so any process, including the crash handler, can run it any number of times.
      */
