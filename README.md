@@ -1,8 +1,14 @@
-﻿# Taskbar Ninja
-Auto-hide and restyle the Windows 11 taskbar, with separate settings for each monitor.
+﻿<h1 align="center">
+  <img src="/resources/icon.svg" width="200px"/><br/>
+  Taskbar Ninja
+</h1>
+<p align="center">
+    Auto-hide and restyle the Windows 11 taskbar, with separate settings for each monitor.<br/>
+    Protect OLED screens from taskbar burn-in, with more control than the Windows auto-hide.
+</p>
 
-Requires Windows 11 22H2 (build 22621) or later. Tested on 24H2 (build 26100). 
-Windows 10 may work but not tested or supported.
+> Requires Windows 11 22H2 (build 22621) or later. Tested on 24H2 (build 26100). 
+> Windows 10 may work but not tested or supported.
 
 ## Features
 - Auto-hide per monitor. The taskbar shows when the mouse touches the screen edge, and hides after a delay.
