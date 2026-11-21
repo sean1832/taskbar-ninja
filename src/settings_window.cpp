@@ -400,15 +400,15 @@ namespace ninja {
                 feather_percent_range, "%d%%");
             ImGui::EndDisabled();
 
+            ImGui::SeparatorText("Configuration");
+            draw_autostart_checkbox(state);
+
             ImGui::Spacing();
             if (ImGui::Button("Open config file")) {
                 PostMessageW(state.window, open_config_message,0, 0); // runs after this frame
             }
             ImGui::SameLine();
             draw_restore_defaults(state);
-
-            ImGui::SeparatorText("System");
-            draw_autostart_checkbox(state);
         }
 
         void open_config_file(const SettingsWindowState& state) {
