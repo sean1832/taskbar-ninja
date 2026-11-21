@@ -30,6 +30,7 @@
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
 
+#include <chrono>
 #include <cstdint>
 #include <cwchar>
 #include <mutex>
@@ -42,6 +43,7 @@ namespace ninja {
     namespace {
         namespace xaml = winrt::Windows::UI::Xaml;
         namespace composition = winrt::Windows::UI::Composition;
+        namespace numerics = winrt::Windows::Foundation::Numerics;
         namespace effects = winrt::Windows::Graphics::Effects;
         namespace effects_abi = ABI::Windows::Graphics::Effects;
 
@@ -67,6 +69,7 @@ namespace ninja {
             InstanceHandle frame_handle; ///< XAML diagnostics handle of its TaskbarFrame, the only field valid on remove
             xaml::UIElement content;     ///< content of the XAML source: icons, tray, clock, background
             HWND taskbar;                ///< Shell_TrayWnd or Shell_SecondaryTrayWnd
+            AnimationRow row;            ///< state the content last went to. default = slid in
         };
 
         HMODULE dll_module = nullptr;
@@ -79,6 +82,7 @@ namespace ninja {
         // written on the signal thread and the XAML thread
         std::mutex look_mutex;
         BackgroundLook look;
+        AnimationTable animation_table; // last table from the app. empty = all content slid in
         winrt::Windows::System::DispatcherQueue xaml_queue = nullptr;
 
         std::wstring format_hresult(const HRESULT result) {
@@ -346,6 +350,93 @@ namespace ninja {
             });
         }
 
+        // move in XAML units that puts the content past the docked edge
+        // XAML units, not pixels: a 72 pixel bar is 48 units at 150 % scale
+        numerics::float3 make_out_translation(const xaml::UIElement& content, TaskbarEdge edge) {
+            auto element = content.as<xaml::FrameworkElement>();
+            float width_xaml_units = static_cast<float>(element.ActualWidth());
+            float height_xaml_units = static_cast<float>(element.ActualHeight());
+            switch (edge) {
+            case TaskbarEdge::bottom:
+                return {0.0f, height_xaml_units, 0.0f};
+            case TaskbarEdge::top:
+                return {0.0f, -height_xaml_units, 0.0f};
+            case TaskbarEdge::left:
+                return {-width_xaml_units, 0.0f, 0.0f};
+            case TaskbarEdge::right:
+                return {width_xaml_units, 0.0f, 0.0f};
+            }
+            return {0.0f, height_xaml_units, 0.0f};
+        }
+
+        [[nodiscard]] bool slide_content(const Taskbar& bar, const AnimationRow& row) {
+            // layout overwrites Offset, but not Translation
+            // see https://learn.microsoft.com/en-us/uwp/api/windows.ui.xaml.hosting.elementcompositionpreview.setistranslationenabled
+            xaml::Hosting::ElementCompositionPreview::SetIsTranslationEnabled(bar.content, true);
+            composition::Visual visual = xaml::Hosting::ElementCompositionPreview::GetElementVisual(bar.content);
+
+            numerics::float3 end_translation{0.0f, 0.0f, 0.0f};
+            if (row.is_slid_out) {
+                end_translation = make_out_translation(bar.content, row.edge);
+                bool has_size = end_translation.x != 0.0f || end_translation.y != 0.0f;
+                if (!has_size) {
+                    return false;
+                }
+            }
+
+            if (row.duration_ms == 0) {
+                visual.StopAnimation(L"Translation");
+                visual.Properties().InsertVector3(L"Translation", end_translation);
+                return true;
+            }
+
+            // see https://learn.microsoft.com/en-us/uwp/api/windows.ui.composition.compositor.createcubicbeziereasingfunction
+            composition::Compositor compositor = visual.Compositor();
+            composition::CubicBezierEasingFunction easing = compositor.CreateCubicBezierEasingFunction(
+                {row.curve.start_control_x, row.curve.start_control_y},
+                {row.curve.end_control_x, row.curve.end_control_y}
+            );
+            // one keyframe at the end. The slide starts from where the content is, thus a turn-around has no jump
+            // see https://learn.microsoft.com/en-us/uwp/api/windows.ui.composition.vector3keyframeanimation
+            composition::Vector3KeyFrameAnimation animation = compositor.CreateVector3KeyFrameAnimation();
+            animation.InsertKeyFrame(1.0f, end_translation, easing);
+            // see https://learn.microsoft.com/en-us/uwp/api/windows.ui.composition.keyframeanimation.duration
+            animation.Duration(std::chrono::milliseconds(row.duration_ms));
+            visual.StartAnimation(L"Translation", animation);
+            return true;
+        }
+
+        AnimationRow find_row(const AnimationTable& table, HWND taskbar) {
+            std::size_t row_count = table.row_count;
+            if (row_count > max_animation_rows) {
+                row_count = max_animation_rows;
+            }
+            for (std::size_t i = 0; i < row_count; ++i) {
+                if (table.rows[i].taskbar_window == reinterpret_cast<std::uintptr_t>(taskbar)) {
+                    return table.rows[i];
+                }
+            }
+            return AnimationRow{};
+        }
+
+        void apply_animation_table(const AnimationTable& table) {
+            for (Taskbar& bar: bars) {
+                AnimationRow row = find_row(table, bar.taskbar);
+                bool is_same = row.is_slid_out == bar.row.is_slid_out && row.edge == bar.row.edge;
+                if (is_same) {
+                    continue;
+                }
+                // try for each taskbar: one bar should not stop the other
+                try {
+                    if (slide_content(bar, row)) {
+                        bar.row = row;
+                    }
+                } catch (...) {
+                    append_log(LogLevel::error, L"explorer_slide_failed", {{L"hresult", format_hresult(winrt::to_hresult())}});
+                }
+            }
+        }
+
         // taskbar window of the XAML source whose content is this element, or nullptr
         // method from TranslucentTB, see https://github.com/TranslucentTB/TranslucentTB/blob/d4636e439865df0a1a1419db408e055740ce5c74/ExplorerTAP/visualtreewatcher.cpp#L45-L72
         HWND find_taskbar_of_content(IXamlDiagnostics& diagnostics, const xaml::UIElement& element) {
@@ -381,13 +472,29 @@ namespace ninja {
                     taskbar = find_taskbar_of_content(diagnostics, element);
                 }
                 if (taskbar != nullptr) {
+                    AnimationTable current_table;
+                    {
+                        std::lock_guard lock(look_mutex);
+                        // the frame arrives before its background, so the queue is set here
+                        if (xaml_queue == nullptr) {
+                            xaml_queue = winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
+                        }
+                        current_table = animation_table;
+                    }
+                    Taskbar bar {
+                        frame_handle, element, taskbar, AnimationRow{}
+                    };
+                    AnimationRow row = find_row(current_table, taskbar);
+                    // a bar that appears later goes to its state at once
+                    row.duration_ms = 0;
+                    if (row.is_slid_out && slide_content(bar, row)) {
+                        bar.row = row;
+                    }
                     // a new frame for a known taskbar takes its place
-                    std::erase_if(bars, [taskbar](const Taskbar& bar) {
-                        return bar.taskbar == taskbar;
+                    std::erase_if(bars, [taskbar](const Taskbar& known) {
+                        return known.taskbar == taskbar;
                     });
-                    bars.push_back(Taskbar{
-                        frame_handle, element, taskbar
-                    });
+                    bars.push_back(bar);
                     append_log(LogLevel::info, L"explorer_taskbar_found", {{L"count", std::to_wstring(bars.size())}});
                     return;
                 }
@@ -409,6 +516,20 @@ namespace ninja {
             // never closed, like the events: the app opens it by name
             HANDLE look_memory = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0,
                 sizeof(BackgroundLook), explorer_look_memory_name);
+            HANDLE animate_event = CreateEventW(nullptr, FALSE, FALSE, explorer_animate_event_name);
+            // never close
+            HANDLE animation_memory = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0,
+                sizeof(AnimationTable), explorer_animation_memory_name);
+            if (animate_event == nullptr || animation_memory == nullptr) {
+                append_log(LogLevel::error, L"explorer_signal_failed", {{L"win32_error", std::to_wstring(GetLastError())}});
+                return;
+            }
+            auto* shared_table = static_cast<const AnimationTable*>(
+                MapViewOfFile(animation_memory, FILE_MAP_READ, 0, 0, sizeof(AnimationTable)));
+            if (shared_table == nullptr) {
+                append_log(LogLevel::error, L"explorer_signal_failed", {{L"win32_error", std::to_wstring(GetLastError())}});
+                return;
+            }
             if (apply_event == nullptr || restore_event == nullptr || look_memory == nullptr) {
                 append_log(LogLevel::error, L"explorer_signal_failed", {{L"win32_error", std::to_wstring(GetLastError())}});
                 return;
@@ -420,24 +541,43 @@ namespace ninja {
                 return;
             }
 
-            HANDLE events[] = {apply_event, restore_event};
+            HANDLE events[] = {apply_event, restore_event, animate_event};
             while (true) {
-                DWORD result = WaitForMultipleObjects(2, events, FALSE, INFINITE);
-                // restore: the default look is the original
-                BackgroundLook next_look;
-                if (result == WAIT_OBJECT_0) {
-                    next_look = *shared_look;
-                } else if (result != WAIT_OBJECT_0 + 1) {
+                DWORD result = WaitForMultipleObjects(3, events, FALSE, INFINITE);
+                bool is_apply = result == WAIT_OBJECT_0;
+                bool is_restore = result == WAIT_OBJECT_0 + 1;
+                bool is_animate = result == WAIT_OBJECT_0 + 2;
+                if (!is_apply && !is_restore && !is_animate) {
                     append_log(LogLevel::error, L"explorer_signal_failed", {{L"win32_error", std::to_wstring(GetLastError())}});
                     return;
                 }
 
                 std::lock_guard lock(look_mutex);
-                look = next_look;
-                // no taskbar found yet: new ones read the look when added
-                if (xaml_queue != nullptr) {
-                    xaml_queue.TryEnqueue([next_look] {
+                if (is_apply) {
+                    look = *shared_look;
+                }
+                if (is_animate) {
+                    animation_table = *shared_table;
+                }
+                // restore: original look, all content slid in at once
+                if (is_restore) {
+                    look = BackgroundLook{};
+                    animation_table = AnimationTable{};
+                }
+                // no taskbar found yet: new ones read the look and the table when added
+                if (xaml_queue == nullptr) {
+                    continue;
+                }
+                bool is_look_changed = is_apply || is_restore;
+                if (is_look_changed) {
+                    xaml_queue.TryEnqueue([next_look = look] {
                         apply_look_to_all(next_look);
+                    });
+                }
+                bool is_table_changed = is_animate || is_restore;
+                if (is_table_changed) {
+                    xaml_queue.TryEnqueue([next_table = animation_table] {
+                        apply_animation_table(next_table);
                     });
                 }
             }
