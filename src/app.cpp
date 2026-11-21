@@ -82,6 +82,7 @@ namespace ninja {
             ULONGLONG config_write_time = 0;
             std::vector<MonitorState> monitors;
             BackgroundSettings background_settings; // background from the config, the last good one
+            TaskbarEdge background_edge = TaskbarEdge::bottom; // edge in the last look
             bool mouse_timer_running = false;
             HANDLE watchdog_process = nullptr;
             int watchdog_restart_count = 0;
@@ -404,6 +405,7 @@ namespace ninja {
 
         // rejected settings: the last good ones
         void apply_background(AppState& state) {
+            state.background_edge = resolve_background_edge(state);
             std::optional<BackgroundSettings> read_settings = read_background_settings(state.config_path);
             BackgroundSettings settings = state.background_settings;
             if (read_settings.has_value()) {
@@ -433,7 +435,7 @@ namespace ninja {
                 return;
             }
             // also without a change: a new Explorer or a new taskbar needs it
-            BackgroundLook look = make_background_look(settings, resolve_background_edge(state));
+            BackgroundLook look = make_background_look(settings, state.background_edge);
             if (!set_background(look)) {
                 // no DLL yet, the ready message calls this again
                 load_explorer(state.window, explorer_ready_message);
@@ -480,6 +482,12 @@ namespace ninja {
             }
             // covers each monitor that still wants it
             apply_hiding(state);
+
+            // taskbar orientation is updated.
+            if (resolve_background_edge(state) != state.background_edge) {
+                apply_animation(state); // update animation with new edge
+                apply_background(state); // update background with new edge
+            }
         }
 
         // any file in the config folder changed, log.txt included
