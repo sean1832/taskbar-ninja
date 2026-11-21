@@ -15,6 +15,7 @@
 #include "backends/imgui_impl_dx11.h"
 #include "backends/imgui_impl_win32.h"
 
+#include "autostart.h"
 #include "config.h"
 #include "explorer_dll.h"
 #include "files.h"
@@ -69,6 +70,7 @@ namespace ninja {
             ULONGLONG config_write_time = 0; // file write time the settings below match; 0 = file missing
             MonitorSettings monitor_settings; // [default] keys as the file has them
             BackgroundSettings background_settings; // background keys as the file has them
+            bool autostart_enabled = false; // not a config key. set at runtime by checking registry.
             ComPtr<ID3D11Device> device;
             ComPtr<ID3D11DeviceContext> device_context;
             ComPtr<IDXGISwapChain> swap_chain;
@@ -206,6 +208,7 @@ namespace ninja {
 
         bool on_create(HWND window, SettingsWindowState& state) {
             load_settings(state);
+            state.autostart_enabled = is_autostart_enabled();
             // hand edits made while the window was closed
             PostMessageW(state.app_window, config_changed_message, 0, 0);
             if (!create_device(window, state)) {
@@ -330,6 +333,21 @@ namespace ninja {
             }
         }
 
+        void draw_autostart_checkbox(SettingsWindowState& state) {
+            if (!ImGui::Checkbox("Start with Windows", &state.autostart_enabled)) {
+                return;
+            }
+            const LSTATUS status = set_autostart(state.autostart_enabled);
+            if (status == ERROR_SUCCESS) {
+                return;
+            }
+            append_log(LogLevel::error, L"autostart_not_set", {
+                {L"enabled", make_bool_text(state.autostart_enabled)},
+                {L"win32_error", std::to_wstring(status)} // registry call return the code, no GetLastError
+            });
+            state.autostart_enabled = is_autostart_enabled(); // check again, shows real value.
+        }
+
         void draw_restore_defaults(SettingsWindowState& state) {
             constexpr char popup_name[] = "Restore defaults?"; // OpenPopup and BeginPopupModal need same id
             if (ImGui::Button("Restore Default")) {
@@ -388,6 +406,9 @@ namespace ninja {
             }
             ImGui::SameLine();
             draw_restore_defaults(state);
+
+            ImGui::SeparatorText("System");
+            draw_autostart_checkbox(state);
         }
 
         void open_config_file(const SettingsWindowState& state) {
@@ -513,6 +534,7 @@ namespace ninja {
             case WM_ACTIVATE:
                 if (LOWORD(wparam) != WA_INACTIVE) {
                     reload_changed_settings(*state); // back from the editor
+                    state->autostart_enabled = is_autostart_enabled(); // can change outside the app
                     request_frames(window, *state);
                 }
                 return DefWindowProcW(window, message, wparam, lparam); // sets the keyboard focus
