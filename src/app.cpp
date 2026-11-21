@@ -14,7 +14,6 @@
 #include "edge.h"
 #include "exit_code.h"
 #include "explorer_load.h"
-#include "files.h"
 #include "hold.h"
 #include "log.h"
 #include "monitor.h"
@@ -700,13 +699,6 @@ namespace ninja {
             case TrayCommand::open_settings:
                 open_settings_window(state.window);
                 return;
-            case TrayCommand::open_config_file: {
-                INT_PTR result = 0;
-                if (!open_path(config_path(), &result)) {
-                    append_log(LogLevel::error, L"open_config_file", {{L"shell_error", std::to_wstring(result)}});
-                }
-                return;
-            }
             case TrayCommand::toggle_autostart: {
                 const bool enabled = !autostart_enabled;
                 std::wstring enabled_text = L"false";
