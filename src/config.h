@@ -19,6 +19,8 @@ namespace ninja {
         int show_delay_ms = 0;           ///< time in the hot zone before the taskbar shows
         int hide_delay_ms = 300;         ///< time away from the taskbar before it hides
         int hot_zone_pixels = 2;         ///< thickness of the strip at the taskbar edge
+        int show_animation_ms = 0;       ///< slide in time. 0 = disabled animation (instant)
+        int hide_animation_ms = 0;       ///< slide out time. 0 = disabled animation (instant)
     };
 
     /**

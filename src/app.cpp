@@ -12,6 +12,7 @@
 #include "config.h"
 #include "edge.h"
 #include "exit_code.h"
+#include "explorer_load.h"
 #include "files.h"
 #include "hold.h"
 #include "log.h"
@@ -44,6 +45,9 @@ namespace ninja {
         constexpr UINT_PTR work_area_timer_id = 3;
         // explorer finishes its own change first. cap a fight over the taskbar at once over a second
         constexpr UINT work_area_check_delay_ms = 1000;
+
+        // posted by the load worker once Explorer has the dll
+        constexpr UINT explorer_ready_message = WM_APP + 2; // WM_APP + 1 is tray_message in tray.h
 
         // one monitor, its settings, and whether its taskbar is hidden now
         struct MonitorState {
@@ -334,7 +338,11 @@ namespace ninja {
                 return;
             }
             // also without a change: a new Explorer or a new taskbar needs it
-            set_background(make_background_look(settings, resolve_background_edge(state)));
+            BackgroundLook look = make_background_look(settings, resolve_background_edge(state));
+            if (!set_background(look)) {
+                // no DLL yet, the ready message calls this again
+                load_explorer(state.window, explorer_ready_message);
+            }
         }
 
         void rebuild_monitors(AppState& state) {
@@ -631,6 +639,9 @@ namespace ninja {
             switch (message) {
             case tray_message:
                 on_tray_activated(*state, lparam);
+                return 0;
+            case explorer_ready_message:
+                apply_background(*state);
                 return 0;
             case WM_TIMER:
                 if (wparam == mouse_timer_id) {
