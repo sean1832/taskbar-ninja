@@ -51,6 +51,10 @@ add_executable(taskbar-ninja WIN32
         resources/app.rc # app icon
         src/autostart.cpp
         src/autostart.h
+        src/explorer_load.cpp
+        src/explorer_load.h
+        src/animation.cpp
+        src/animation.h
 )
 
 target_compile_definitions(taskbar-ninja PRIVATE

@@ -6,9 +6,10 @@ namespace ninja {
     /**
      * Gives the background of every taskbar a look.
      * @param look style and its options
-     * @remarks Returns at once. A worker thread loads the explorer dll first when Explorer does not have it yet.
+     * @return false when Explorer does not have the explorer dll, so nothing changed
      */
-    void set_background(const BackgroundLook& look);
+    [[nodiscard]] bool set_background(const BackgroundLook& look);
+
 
     /**
      * Puts the original background back on every taskbar.

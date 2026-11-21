@@ -43,6 +43,8 @@ cover_taskbar_area = true
 show_delay_ms = 0
 hide_delay_ms = 300
 hot_zone_pixels = 2
+show_animation_ms = 300
+hide_animation_ms = 300
 background = blur
 background_color = 40202020
 background_blur_pixels = 10
@@ -57,6 +59,8 @@ background_feather_percent = 50
 | `show_delay_ms` | 0 to 10000 | Time in the hot zone before the taskbar shows. |
 | `hide_delay_ms` | 0 to 10000 | Time away from the taskbar before it hides. |
 | `hot_zone_pixels` | 1 to 50 | Thickness of the strip at the screen edge that shows the taskbar. |
+| `show_animation_ms` | 0 to 2000 | Time the taskbar takes to slide in. 0 = shows at once. |
+| `hide_animation_ms` | 0 to 2000 | Time the taskbar takes to slide out. Starts after `hide_delay_ms`. 0 = hides at once. |
 | `background` | `original`, `clear`, `tint`, `acrylic`, `blur` | Background of every taskbar. |
 | `background_color` | `AARRGGBB` hex | Colour for `tint`, `acrylic` and `blur`. `AA` is the opacity. |
 | `background_blur_pixels` | 1 to 50 | Blur strength. |
@@ -66,6 +70,8 @@ background_feather_percent = 50
 To give one monitor its own settings, add a section named after its model, for example `[DELL U2720Q]`. Keys you leave out come from `[default]`. You can find the model names on the `monitor` lines in `%APPDATA%\taskbar-ninja\log.txt`.
 
 The `background_*` keys apply to every taskbar and only work in `[default]`.
+
+A missing `show_animation_ms` or `hide_animation_ms` means 0, so a config from an older version keeps its instant show and hide.
 
 `acrylic` and `blur` need **Settings > Personalization > Colors > Transparency effects** turned on.
 

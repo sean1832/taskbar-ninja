@@ -21,6 +21,8 @@ namespace ninja {
         constexpr int max_delay_ms = 10000;
         constexpr int min_hot_zone_pixels = 1;
         constexpr int max_hot_zone_pixels = 50;
+        constexpr int min_animation_ms = 0;
+        constexpr int max_animation_ms = 2000;
 
         constexpr int min_blur_pixels = 1;
         constexpr int max_blur_pixels = 50;
@@ -37,6 +39,9 @@ namespace ninja {
             "show_delay_ms = 0\r\n"
             "hide_delay_ms = 300\r\n"
             "hot_zone_pixels = 2\r\n"
+            "; 0 = no animation\r\n"
+            "show_animation_ms = 300\r\n"
+            "hide_animation_ms = 300\r\n"
             "; original, clear, tint, acrylic or blur\r\n"
             "background = original\r\n"
             "; AARRGGBB in hex\r\n"
@@ -198,6 +203,8 @@ namespace ninja {
         settings.show_delay_ms = read_int(source, L"show_delay_ms", min_delay_ms, max_delay_ms, default_settings.show_delay_ms);
         settings.hide_delay_ms = read_int(source, L"hide_delay_ms", min_delay_ms, max_delay_ms, default_settings.hide_delay_ms);
         settings.hot_zone_pixels = read_int(source, L"hot_zone_pixels", min_hot_zone_pixels, max_hot_zone_pixels, default_settings.hot_zone_pixels);
+        settings.show_animation_ms = read_int(source, L"show_animation_ms", min_animation_ms, max_animation_ms, default_settings.show_animation_ms);
+        settings.hide_animation_ms = read_int(source, L"hide_animation_ms", min_animation_ms, max_animation_ms, default_settings.hide_animation_ms);
 
         if (source.has_rejected_value) {
             return std::nullopt;
