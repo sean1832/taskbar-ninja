@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "animation.h"
-#include "autostart.h"
 #include "background.h"
 #include "config.h"
 #include "edge.h"
@@ -658,9 +657,7 @@ namespace ninja {
                 return;
             }
 
-            // read everytime since user can change this outside the app
-            const bool autostart_enabled = is_autostart_enabled();
-            TrayCommand command = show_tray_menu(state.window, state.paused, autostart_enabled);
+            TrayCommand command = show_tray_menu(state.window, state.paused);
             switch (command) {
             case TrayCommand::none:
                 return;
@@ -672,22 +669,6 @@ namespace ninja {
             case TrayCommand::open_settings:
                 open_settings_window(state.window);
                 return;
-            case TrayCommand::toggle_autostart: {
-                const bool enabled = !autostart_enabled;
-                std::wstring enabled_text = L"false";
-                if (enabled) {
-                    enabled_text = L"true";
-                }
-
-                const LSTATUS status = set_autostart(enabled);
-                if (status != ERROR_SUCCESS) {
-                    append_log(LogLevel::error, L"autostart_not_set", {
-                        {L"enabled", enabled_text},
-                        {L"win32_error", std::to_wstring(GetLastError())},
-                    });
-                }
-                return;
-            }
             case TrayCommand::restore_and_exit:
                 exit_app(state);
                 return;

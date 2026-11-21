@@ -17,7 +17,6 @@ namespace ninja {
         none = 0,             ///< menu closed with no choice
         toggle_pause = 1,     ///< pause or resume hiding and background
         restore_and_exit = 2, ///< show the taskbar and close the app
-        toggle_autostart = 4, ///< toggle start the app on sign-in
         open_settings = 5     ///< open the settings GUI window
     };
 
@@ -39,8 +38,7 @@ namespace ninja {
      * Shows the tray menu at the cursor and waits for a choice.
      * @param window owner window of the menu
      * @param paused puts a check mark on "Pause" when true
-     * @param autostart_enabled puts a check mark on "Start with Windows" when true
      * @return chosen command, or none when the menu closed with no choice
      */
-    [[nodiscard]] TrayCommand show_tray_menu(HWND window, bool paused, bool autostart_enabled);
+    [[nodiscard]] TrayCommand show_tray_menu(HWND window, bool paused);
 } // namespace ninja

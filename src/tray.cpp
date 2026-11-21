@@ -40,21 +40,15 @@ namespace ninja {
         Shell_NotifyIconW(NIM_DELETE, &icon);
     }
 
-    TrayCommand show_tray_menu(HWND window, bool paused, bool autostart_enabled) {
+    TrayCommand show_tray_menu(HWND window, bool paused) {
         UINT pause_flags = MF_STRING;
         if (paused) {
             pause_flags |= MF_CHECKED;
         }
 
-        UINT autostart_flags = MF_STRING;
-        if (autostart_enabled) {
-            autostart_flags |= MF_CHECKED;
-        }
-
         HMENU menu = CreatePopupMenu();
         AppendMenuW(menu, pause_flags, static_cast<UINT_PTR>(TrayCommand::toggle_pause), L"Pause");
         AppendMenuW(menu, MF_STRING, static_cast<UINT_PTR>(TrayCommand::open_settings), L"Settings");
-        AppendMenuW(menu, autostart_flags, static_cast<UINT_PTR>(TrayCommand::toggle_autostart), L"Start With Windows");
         AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(menu, MF_STRING, static_cast<UINT_PTR>(TrayCommand::restore_and_exit), L"Exit");
 
@@ -74,7 +68,6 @@ namespace ninja {
         case TrayCommand::none:
         case TrayCommand::toggle_pause:
         case TrayCommand::restore_and_exit:
-        case TrayCommand::toggle_autostart:
         case TrayCommand::open_settings:
             return chosen;
         }
