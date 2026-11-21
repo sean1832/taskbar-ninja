@@ -9,6 +9,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "files.h"
 #include "log.h"
@@ -241,6 +242,33 @@ namespace ninja {
             return std::nullopt;
         }
         return settings;
+    }
+
+    std::vector<std::wstring> read_monitor_sections(const std::wstring& config_path) {
+        std::vector<std::wstring> sections;
+        if (config_path.empty()) {
+            return sections; // empty path: windows would read from its own folder
+        }
+        std::vector<wchar_t> names(1024); // zero filled.
+        for (;;) {
+            const auto name_capacity = static_cast<DWORD>(names.size());
+            const DWORD length = GetPrivateProfileSectionNamesW(names.data(), name_capacity, config_path.c_str());
+            if (length < name_capacity - 2) {
+                break; // all names fit
+            }
+
+            names.assign(names.size() * 2, L'\0'); // size - 2: list cut off
+        }
+
+        // name, null, name, null, ..., empty name
+        const wchar_t* name = names.data();
+        while (*name != L'\0') {
+            if (_wcsicmp(name, default_section) != 0) {
+                sections.emplace_back(name);
+            }
+            name += std::wcslen(name) + 1;
+        }
+        return sections;
     }
 
     bool write_config_value(const std::wstring& config_path, const wchar_t* section, const wchar_t* key, const std::wstring& value) {

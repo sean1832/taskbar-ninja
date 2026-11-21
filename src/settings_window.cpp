@@ -10,6 +10,7 @@
 #include <cwchar>
 #include <string>
 #include <string_view>
+#include <optional>
 
 #include "imgui.h"
 #include "backends/imgui_impl_dx11.h"
@@ -20,6 +21,7 @@
 #include "explorer_dll.h"
 #include "files.h"
 #include "log.h"
+#include "monitor.h"
 
 // imgui leaves it out of its header, so the header needs no windows.h
 // See third_party/imgui/backends/imgui_impl_win32.h
@@ -60,6 +62,17 @@ namespace ninja {
         };
 
         /**
+         * One entry of the monitor dropdown.
+         * @remarks One entry per section, so identical monitors share one.
+         */
+        struct SettingsTarget {
+            std::wstring section; // model name; empty = [default], All monitors
+            int monitor_count = 0; // connected monitors with this model name; 0 = not connected
+            bool has_primary = false; // one of them is the main monitor
+            std::string label; // dropdown text, UTF-8
+        };
+
+        /**
          * State of the open settings window.
          * @remarks Made on WM_NCCREATE, deleted on WM_NCDESTROY. The window holds a pointer to it.
          */
@@ -71,6 +84,10 @@ namespace ninja {
             MonitorSettings monitor_settings; // [default] keys as the file has them
             BackgroundSettings background_settings; // background keys as the file has them
             BackgroundSettings previewed_background; // last look sent to the app; a difference sends a preview
+            std::vector<SettingsTarget> targets; // [0] = All monitors, then connected, then not connected
+            size_t target_index = 0; // selected entry in targets
+            int unnamed_monitor_count = 0; // connected monitors with no model name: [default] only
+            bool has_monitor_sections = false; // file has a section other than [default]
             bool autostart_enabled = false; // not a config key. set at runtime by checking registry.
             ComPtr<ID3D11Device> device;
             ComPtr<ID3D11DeviceContext> device_context;
@@ -188,6 +205,102 @@ namespace ninja {
             return true;
         }
 
+        // imgui takes UTF-8
+        std::string make_utf8_text(std::wstring_view text) {
+            if (text.empty()) {
+                return {};
+            }
+            const int text_length = static_cast<int>(text.size());
+            const int byte_count = WideCharToMultiByte(CP_UTF8, 0, text.data(), text_length, nullptr, 0, nullptr, nullptr);
+            std::string utf8_text(static_cast<size_t>(byte_count), '\0');
+            WideCharToMultiByte(CP_UTF8, 0, text.data(), text_length, utf8_text.data(), byte_count, nullptr, nullptr);
+            return utf8_text;
+        }
+
+        // section names ignore case, as in the profile api
+        std::optional<size_t> find_target(const std::vector<SettingsTarget>& targets, const std::wstring& section) {
+            for (size_t i = 0; i < targets.size(); i++) {
+                if (_wcsicmp(targets[i].section.c_str(), section.c_str()) == 0) {
+                    return i;
+                }
+            }
+            return std::nullopt;
+        }
+
+        std::string make_target_label(const SettingsTarget& target) {
+            if (target.section.empty()) {
+                return "All monitors";
+            }
+            std::wstring label = target.section;
+            if (target.monitor_count > 1) {
+                label += L" (" + std::to_wstring(target.monitor_count) + L" monitors)";
+            }
+            if (target.has_primary) {
+                label += L" (primary)";
+            }
+            return make_utf8_text(label);
+        }
+
+        // All monitors, connected models, then sections of monitors not connected
+        std::vector<SettingsTarget> build_targets(const std::vector<Monitor>& monitors,
+            const std::vector<std::wstring>& sections) {
+            std::vector<SettingsTarget> targets;
+            targets.push_back({}); // All monitors
+
+            for (const Monitor& monitor : monitors) {
+                if (monitor.model_name.empty()) {
+                    continue; // no section possible
+                }
+                std::optional<size_t> index = find_target(targets, monitor.model_name);
+                if (!index.has_value()) {
+                    index = targets.size();
+                    targets.push_back({monitor.model_name});
+                }
+                SettingsTarget& target = targets[*index];
+                target.monitor_count += 1; // identical monitors share one section
+                target.has_primary = target.has_primary || monitor.is_primary;
+            }
+
+            for (const std::wstring& section : sections) {
+                if (!find_target(targets, section).has_value()) {
+                    targets.push_back({section}); // monitor_count 0: not connected
+                }
+            }
+
+            for (SettingsTarget& target : targets) {
+                target.label = make_target_label(target);
+            }
+            return targets;
+        }
+
+        // one monitor and no sections: All monitors is the only target that does something
+        bool should_show_targets(const SettingsWindowState& state) {
+            return state.targets.size() > 2 || state.has_monitor_sections;
+        }
+
+        void load_monitor_targets(SettingsWindowState& state) {
+            std::wstring selected_section; // empty: All monitors
+            if (state.target_index < state.targets.size()) {
+                selected_section = state.targets[state.target_index].section;
+            }
+
+            const std::vector<Monitor> monitors = build_monitor_list();
+            const std::vector<std::wstring> sections = read_monitor_sections(state.config_path);
+            state.targets = build_targets(monitors, sections);
+            state.has_monitor_sections = !sections.empty();
+            state.unnamed_monitor_count = 0;
+            for (const Monitor& monitor : monitors) {
+                if (monitor.model_name.empty()) {
+                    state.unnamed_monitor_count += 1;
+                }
+            }
+
+            state.target_index = find_target(state.targets, selected_section).value_or(0); // gone: All monitors
+            if (!should_show_targets(state)) {
+                state.target_index = 0; // no dropdown, no hidden target
+            }
+        }
+
         void load_settings(SettingsWindowState& state) {
             state.config_path = config_path();
             // time first: a save during the read gives a new time, so the next focus reads again
@@ -196,6 +309,7 @@ namespace ninja {
             state.monitor_settings = read_monitor_settings(state.config_path, L"").value_or(MonitorSettings{});
             state.background_settings = read_background_settings(state.config_path).value_or(BackgroundSettings{});
             state.previewed_background = state.background_settings; // file look: nothing to preview
+            load_monitor_targets(state); // sections can change with the file
         }
 
         // a hand edit since the last read: show the file, and the app reloads too
@@ -240,18 +354,6 @@ namespace ninja {
             ImGui_ImplWin32_Shutdown();
             ImGui::DestroyContext();
             state.imgui_started = false;
-        }
-
-        // imgui takes UTF-8
-        std::string make_utf8_text(std::wstring_view text) {
-            if (text.empty()) {
-                return {};
-            }
-            const int text_length = static_cast<int>(text.size());
-            const int byte_count = WideCharToMultiByte(CP_UTF8, 0, text.data(), text_length, nullptr, 0, nullptr, nullptr);
-            std::string utf8_text(static_cast<size_t>(byte_count), '\0');
-            WideCharToMultiByte(CP_UTF8, 0, text.data(), text_length, utf8_text.data(), byte_count, nullptr, nullptr);
-            return utf8_text;
         }
 
         // 0..1 to 0..255, rounded
@@ -374,10 +476,42 @@ namespace ninja {
             ImGui::EndPopup();
         }
 
+        // monitor targets
+        void draw_monitor_target_combo(SettingsWindowState& state) {
+            if (!should_show_targets(state)) {
+                return;
+            }
+            const SettingsTarget& selected = state.targets[state.target_index];
+            if (ImGui::BeginCombo("Monitor", selected.label.c_str())) {
+                bool is_separator_drawn = false;
+                for (size_t i = 0; i < state.targets.size(); i++) {
+                    const SettingsTarget& target = state.targets[i];
+                    // non-connected monitor come last. index 0 is all monitor
+                    const bool is_first_not_connected = i > 0 && target.monitor_count == 0 && !is_separator_drawn;
+                    if (is_first_not_connected) {
+                        ImGui::SeparatorText("Not connected");
+                        is_separator_drawn = true;
+                    }
+
+                    ImGui::PushID(static_cast<int>(i)); // [Dell] and [DELL] give same label
+                    if (ImGui::Selectable(target.label.c_str(), i == state.target_index)) {
+                        state.target_index = i;
+                    }
+                    ImGui::PopID();
+                }
+                ImGui::EndCombo();
+            }
+            if (state.unnamed_monitor_count > 0) {
+                ImGui::TextDisabled("%d monitor(s) with no name use All monitors.", state.unnamed_monitor_count);
+            }
+        }
+
          // every [default] key
         void draw_settings(SettingsWindowState& state) {
             MonitorSettings& monitor = state.monitor_settings;
             BackgroundSettings& background = state.background_settings;
+
+            draw_monitor_target_combo(state);
 
             ImGui::SeparatorText("Hiding");
             draw_checkbox(state, "Auto hide", L"auto_hide", monitor.auto_hide);
@@ -540,6 +674,10 @@ namespace ninja {
                 }
                 return 0;
             }
+            case WM_DISPLAYCHANGE:
+                load_monitor_targets(*state);
+                request_frames(window, *state);
+                return 0;
             case WM_ACTIVATE:
                 if (LOWORD(wparam) != WA_INACTIVE) {
                     reload_changed_settings(*state); // back from the editor

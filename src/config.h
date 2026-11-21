@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "explorer_dll.h"
 
@@ -90,6 +91,13 @@ namespace ninja {
      * @remarks One look for every taskbar. A monitor section does not override it. Logs one line for each rejected value.
      */
     [[nodiscard]] std::optional<BackgroundSettings> read_background_settings(const std::wstring& config_path);
+
+    /**
+     * Reads the names of the monitor sections in config.ini, every section but [default].
+     * @param config_path path from write_default_config
+     * @return section names in file order, empty when the file has none
+     */
+    [[nodiscard]] std::vector<std::wstring> read_monitor_sections(const std::wstring& config_path);
 
     /**
      * Writes one key into one section of config.ini and keeps every other line.
