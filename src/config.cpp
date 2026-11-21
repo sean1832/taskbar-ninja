@@ -5,46 +5,30 @@
 #include <cstdint>
 #include <cwchar>
 #include <cwctype>
-#include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include "files.h"
 #include "log.h"
 
 namespace ninja {
     namespace {
-        constexpr wchar_t default_section[] = L"default";
         constexpr DWORD max_value_characters = 64;
-
-        constexpr int min_delay_ms = 0;
-        constexpr int max_delay_ms = 10000;
-        constexpr int min_hot_zone_pixels = 1;
-        constexpr int max_hot_zone_pixels = 50;
-        constexpr int min_animation_ms = 0;
-        constexpr int max_animation_ms = 2000;
-
-        constexpr int min_blur_pixels = 1;
-        constexpr int max_blur_pixels = 50;
-        constexpr int min_feather_percent = 1;
-        constexpr int max_feather_percent = 100;
 
         // ASCII only: the profile API reads ASCII and UTF-8 files the same way
         constexpr char default_config_text[] =
-            "; [default] applies to every monitor. Monitor names are in log.txt, on the monitor lines.\r\n"
-            "; See detail: https://github.com/sean1832/taskbar-ninja#config\r\n"
+            "; see: https://github.com/sean1832/taskbar-ninja#config\r\n"
             "[default]\r\n"
             "auto_hide = true\r\n"
             "cover_taskbar_area = true\r\n" // need auto_hide = true
             "show_delay_ms = 0\r\n"
             "hide_delay_ms = 300\r\n"
             "hot_zone_pixels = 2\r\n"
-            "; 0 = no animation\r\n"
             "show_animation_ms = 300\r\n"
             "hide_animation_ms = 300\r\n"
-            "; original, clear, tint, acrylic or blur\r\n"
             "background = original\r\n"
-            "; AARRGGBB in hex\r\n"
             "background_color = 40202020\r\n"
             "background_blur_pixels = 10\r\n"
             "background_feather = true\r\n"
@@ -55,7 +39,7 @@ namespace ninja {
         struct SettingsSource {
             const std::wstring& config_path;
             const std::wstring& model_name;
-            bool has_rejected_value = false;
+            std::vector<std::wstring> rejections; // one message for each rejected value
         };
 
         // own section first, then [default]; empty when neither has the key
@@ -74,7 +58,7 @@ namespace ninja {
         }
 
         void reject_value(SettingsSource& source, const std::wstring& message) {
-            source.has_rejected_value = true;
+            source.rejections.push_back(message);
             append_log(LogLevel::warning, L"config_rejected", {
                 {L"monitor", source.model_name},
                 {L"message", message}
@@ -96,7 +80,7 @@ namespace ninja {
             return fallback;
         }
 
-        int read_int(SettingsSource& source, const wchar_t* key, int min, int max, int fallback) {
+        int read_int(SettingsSource& source, const wchar_t* key, IntRange range, int fallback) {
             std::wstring text = read_text(source, key);
             if (text.empty()) {
                 return fallback;
@@ -106,13 +90,13 @@ namespace ninja {
             // too big: wcstol gives LONG_MAX, which the range check rejects
             long number = std::wcstol(text.c_str(), &end, 10);
             bool is_whole_number = end != text.c_str() && *end == L'\0';
-            bool is_in_range = number >= min && number <= max;
+            bool is_in_range = number >= range.min && number <= range.max;
             if (is_whole_number && is_in_range) {
                 return static_cast<int>(number);
             }
 
-            reject_value(source, std::wstring(key) + L" must be a whole number in [" + std::to_wstring(min) +
-                L", " + std::to_wstring(max) + L"]");
+            reject_value(source, std::wstring(key) + L" must be a whole number in [" + std::to_wstring(range.min) +
+                L", " + std::to_wstring(range.max) + L"]");
             return fallback;
         }
 
@@ -189,34 +173,55 @@ namespace ninja {
         return path;
     }
 
-    std::optional<MonitorSettings> read_monitor_settings(const std::wstring& config_path, const std::wstring& model_name) {
+    bool restore_default_config(const std::wstring& config_path) {
+        if (config_path.empty()) {
+            return false; // empty path
+        }
+
+        const std::wstring backup_path = config_path + L".bak";
+        // REPLACE EXISTING: only single backup is kept
+        if (!MoveFileExW(config_path.c_str(), backup_path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+            DWORD err = GetLastError();
+            if (err != ERROR_FILE_NOT_FOUND) {
+                append_log(LogLevel::error, L"config_not_restored",{
+                    {L"win32_error", std::to_wstring(err)}
+                });
+                return false; // file locked or no access. unchanged
+            }
+        }
+        const std::wstring written_path = write_default_config();
+        if (read_config_write_time(written_path) == 0) {
+            return false; // no file after write
+        }
+        append_log(LogLevel::info, L"config_written", {{L"backup", backup_path}});
+        return true;
+    }
+
+    MonitorSettingsRead read_monitor_settings(const std::wstring& config_path, const std::wstring& model_name) {
         MonitorSettings default_settings;
         // no file path: an empty path makes windows read from its own folder
         if (config_path.empty()) {
-            return default_settings;
+            return {default_settings, {}};
         }
 
         SettingsSource source = {config_path, model_name};
         MonitorSettings settings;
         settings.auto_hide = read_bool(source, L"auto_hide", default_settings.auto_hide);
         settings.cover_taskbar_area = read_bool(source, L"cover_taskbar_area", default_settings.cover_taskbar_area);
-        settings.show_delay_ms = read_int(source, L"show_delay_ms", min_delay_ms, max_delay_ms, default_settings.show_delay_ms);
-        settings.hide_delay_ms = read_int(source, L"hide_delay_ms", min_delay_ms, max_delay_ms, default_settings.hide_delay_ms);
-        settings.hot_zone_pixels = read_int(source, L"hot_zone_pixels", min_hot_zone_pixels, max_hot_zone_pixels, default_settings.hot_zone_pixels);
-        settings.show_animation_ms = read_int(source, L"show_animation_ms", min_animation_ms, max_animation_ms, default_settings.show_animation_ms);
-        settings.hide_animation_ms = read_int(source, L"hide_animation_ms", min_animation_ms, max_animation_ms, default_settings.hide_animation_ms);
+        settings.show_delay_ms = read_int(source, L"show_delay_ms", delay_ms_range, default_settings.show_delay_ms);
+        settings.hide_delay_ms = read_int(source, L"hide_delay_ms", delay_ms_range, default_settings.hide_delay_ms);
+        settings.hot_zone_pixels = read_int(source, L"hot_zone_pixels", hot_zone_pixels_range, default_settings.hot_zone_pixels);
+        settings.show_animation_ms = read_int(source, L"show_animation_ms", animation_ms_range, default_settings.show_animation_ms);
+        settings.hide_animation_ms = read_int(source, L"hide_animation_ms", animation_ms_range, default_settings.hide_animation_ms);
 
-        if (source.has_rejected_value) {
-            return std::nullopt;
-        }
-        return settings;
+        return {settings, std::move(source.rejections)};
     }
 
-    std::optional<BackgroundSettings> read_background_settings(const std::wstring& config_path) {
+    BackgroundSettingsRead read_background_settings(const std::wstring& config_path) {
         BackgroundSettings default_settings;
         // no file path: an empty path makes windows read from its own folder
         if (config_path.empty()) {
-            return default_settings;
+            return {default_settings, {}};
         }
 
         // empty model name: [default] only
@@ -225,31 +230,91 @@ namespace ninja {
         BackgroundSettings settings;
         settings.style = read_style(source, L"background", default_settings.style);
         settings.color_argb = read_color(source, L"background_color", default_settings.color_argb);
-        settings.blur_pixels = read_int(source, L"background_blur_pixels", min_blur_pixels, max_blur_pixels, default_settings.blur_pixels);
+        settings.blur_pixels = read_int(source, L"background_blur_pixels", blur_pixels_range, default_settings.blur_pixels);
         settings.feather = read_bool(source, L"background_feather", default_settings.feather);
-        settings.feather_percent = read_int(source, L"background_feather_percent", min_feather_percent, max_feather_percent, default_settings.feather_percent);
+        settings.feather_percent = read_int(source, L"background_feather_percent", feather_percent_range, default_settings.feather_percent);
 
-        if (source.has_rejected_value) {
-            return std::nullopt;
-        }
-        return settings;
+        return {settings, std::move(source.rejections)};
     }
 
-    HANDLE start_config_watch(const std::wstring& config_path) {
-        size_t separator_index = config_path.find_last_of(L"\\");
-        if (separator_index == std::wstring::npos) {
-            return nullptr;
+    std::vector<std::wstring> read_monitor_sections(const std::wstring& config_path) {
+        std::vector<std::wstring> sections;
+        if (config_path.empty()) {
+            return sections; // empty path: windows would read from its own folder
         }
-        std::wstring folder = config_path.substr(0, separator_index);
+        std::vector<wchar_t> names(1024); // zero filled.
+        for (;;) {
+            const auto name_capacity = static_cast<DWORD>(names.size());
+            const DWORD length = GetPrivateProfileSectionNamesW(names.data(), name_capacity, config_path.c_str());
+            if (length < name_capacity - 2) {
+                break; // all names fit
+            }
 
-        // last write: saved in place; file name: saved through a temp file and a rename
-        HANDLE watch = FindFirstChangeNotificationW(folder.c_str(), FALSE,
-            FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_FILE_NAME);
-        if (watch == INVALID_HANDLE_VALUE) {
-            append_log(LogLevel::error, L"config_watch_rejected", {{L"win32_error", std::to_wstring(GetLastError())}});
-            return nullptr;
+            names.assign(names.size() * 2, L'\0'); // size - 2: list cut off
         }
-        return watch;
+
+        // name, null, name, null, ..., empty name
+        const wchar_t* name = names.data();
+        while (*name != L'\0') {
+            if (_wcsicmp(name, default_section) != 0) {
+                sections.emplace_back(name);
+            }
+            name += std::wcslen(name) + 1;
+        }
+        return sections;
+    }
+
+    bool write_config_value(const std::wstring& config_path, const wchar_t* section, const wchar_t* key, const std::wstring& value) {
+        if (config_path.empty()) {
+            return false; // empty path
+        }
+
+        if (!WritePrivateProfileStringW(section, key, value.c_str(), config_path.c_str())) {
+            append_log(LogLevel::error, L"config_value_not_written", {
+                {L"key", key},
+                {L"win32_error", std::to_wstring(GetLastError())}
+            });
+            return false;
+        }
+        return true;
+    }
+
+    bool has_config_value(const std::wstring& config_path, const wchar_t* section, const wchar_t* key) {
+        if (config_path.empty()) {
+            return false; // empty path: windows would read from its own folder
+        }
+        wchar_t value[max_value_characters] = {};
+        GetPrivateProfileStringW(section, key, L"", value, max_value_characters, config_path.c_str());
+        return value[0] != L'\0'; // empty reads as missing, as in read_text
+    }
+
+    bool delete_config_value(const std::wstring& config_path, const wchar_t* section, const wchar_t* key) {
+        if (config_path.empty()) {
+            return false; // empty path
+        }
+        // null value: the profile api removes the line
+        if (!WritePrivateProfileStringW(section, key, nullptr, config_path.c_str())) {
+            append_log(LogLevel::error, L"config_value_not_deleted", {
+                {L"key", key},
+                {L"win32_error", std::to_wstring(GetLastError())}
+            });
+            return false;
+        }
+        return true;
+    }
+
+    std::wstring make_bool_text(bool value) {
+        if (value) {
+            return L"true";
+        }
+        return L"false";
+    }
+
+    // same format read_color accept
+    std::wstring make_color_text(std::uint32_t color_argb) {
+        wchar_t text[9] = {}; // 8 digit and the null
+        std::swprintf(text, 9, L"%08X", static_cast<unsigned int>(color_argb)); // convert hex
+        return text;
     }
 
     ULONGLONG read_config_write_time(const std::wstring& config_path) {

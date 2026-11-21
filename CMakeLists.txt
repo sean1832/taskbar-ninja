@@ -55,6 +55,8 @@ add_executable(taskbar-ninja WIN32
         src/explorer_load.h
         src/animation.cpp
         src/animation.h
+        src/settings_window.cpp
+        src/settings_window.h
 )
 
 target_compile_definitions(taskbar-ninja PRIVATE
@@ -68,11 +70,40 @@ target_compile_definitions(taskbar-ninja PRIVATE
 
 # advapi32: registry
 # dwmapi: DwmGetWindowAttribute for taskbar background color
-target_link_libraries(taskbar-ninja PRIVATE user32 shell32 dwmapi advapi32)
+# imgui: settings window UI
+# d3d11: settings window device
+target_link_libraries(taskbar-ninja PRIVATE user32 shell32 dwmapi advapi32 imgui d3d11)
 
 target_compile_options(taskbar-ninja PRIVATE /W4 /WX /permissive- /utf-8)
 
-# ==== EXPLORER DLL ====
+# ===============================
+# DEAR IMGUI
+# ===============================
+# third-party code: no /W4 /WX
+add_library(imgui STATIC
+        third_party/imgui/imgui.cpp
+        third_party/imgui/imgui_draw.cpp
+        third_party/imgui/imgui_widgets.cpp
+        third_party/imgui/imgui_tables.cpp
+        third_party/imgui/imgui_demo.cpp # style editor while developing; empty in Release
+        third_party/imgui/backends/imgui_impl_win32.cpp
+        third_party/imgui/backends/imgui_impl_dx11.cpp
+)
+
+# PUBLIC: the app includes "imgui.h" and "backends/imgui_impl_win32.h"
+target_include_directories(imgui PUBLIC third_party/imgui)
+
+target_compile_definitions(imgui
+        PUBLIC $<$<NOT:$<CONFIG:Debug>>:IMGUI_DISABLE_DEMO_WINDOWS> # every file that includes imgui.h must see the same config
+        PRIVATE IMGUI_IMPL_WIN32_DISABLE_GAMEPAD # no XInput dll load
+)
+
+# utf-8: imgui source has non-ASCII text
+target_compile_options(imgui PRIVATE /utf-8)
+
+# ===============================
+# EXPLORER DLL
+# ===============================
 # Loaded into explorer.exe, sets the taskbar background brush
 add_library(taskbar-ninja-explorer SHARED
         src/explorer_dll.cpp
