@@ -4,8 +4,7 @@
 </h1>
 
 <p align="center">
-  Auto-hide and restyle the Windows 11 taskbar, with separate settings for each monitor.<br/>
-  Protect OLED screens from taskbar burn-in, with more control than the Windows auto-hide.
+  Auto-hide and restyle the Windows 11 taskbar. Protect OLED screens from taskbar burn-in.
 </p>
 
 <p align="center">
