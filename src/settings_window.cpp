@@ -5,14 +5,19 @@
 #include <dwmapi.h>
 #include <wrl/client.h>
 
+#include <algorithm>
+#include <cstdint>
 #include <cwchar>
 #include <string>
+#include <string_view>
 
 #include "imgui.h"
 #include "backends/imgui_impl_dx11.h"
 #include "backends/imgui_impl_win32.h"
 
 #include "config.h"
+#include "explorer_dll.h"
+#include "files.h"
 #include "log.h"
 
 // imgui leaves it out of its header, so the header needs no windows.h
@@ -43,6 +48,9 @@ namespace ninja {
         // reload_settings_window to the window itself
         constexpr UINT settings_reload_message = WM_APP + 1;
 
+        // "Open config file" button; ShellExecuteW runs a message loop, so never inside a frame
+        constexpr UINT open_config_message = WM_APP + 2;
+
         // gpu first, then cpu renderer
         struct DriverChoice {
             D3D_DRIVER_TYPE type;
@@ -58,10 +66,11 @@ namespace ninja {
          * @remarks Made on WM_NCCREATE, deleted on WM_NCDESTROY. The window holds a pointer to it.
          */
         struct SettingsWindowState {
-            HWND app_window = nullptr; // gets settings_commited_message
+            HWND window = nullptr; // this settings window
+            HWND app_window = nullptr; // gets settings_committed_message
             std::wstring config_path;
             MonitorSettings monitor_settings; // [default] keys as the file has them
-            BackgroundSettings background_settings; // background key as the file has them
+            BackgroundSettings background_settings; // background keys as the file has them
             ComPtr<ID3D11Device> device;
             ComPtr<ID3D11DeviceContext> device_context;
             ComPtr<IDXGISwapChain> swap_chain;
@@ -216,6 +225,131 @@ namespace ninja {
             state.imgui_started = false;
         }
 
+        // imgui takes UTF-8
+        std::string make_utf8_text(std::wstring_view text) {
+            if (text.empty()) {
+                return {};
+            }
+            const int text_length = static_cast<int>(text.size());
+            const int byte_count = WideCharToMultiByte(CP_UTF8, 0, text.data(), text_length, nullptr, 0, nullptr, nullptr);
+            std::string utf8_text(static_cast<size_t>(byte_count), '\0');
+            WideCharToMultiByte(CP_UTF8, 0, text.data(), text_length, utf8_text.data(), byte_count, nullptr, nullptr);
+            return utf8_text;
+        }
+
+        // 0..1 to 0..255, rounded
+        std::uint32_t make_color_byte(float channel) {
+            const float clamped = std::clamp(channel, 0.0f, 1.0f);
+            return static_cast<std::uint32_t>(clamped * 255.0f + 0.5f);
+        }
+
+        std::uint32_t make_color_argb(const float rgba[4]) {
+            const std::uint32_t red = make_color_byte(rgba[0]);
+            const std::uint32_t green = make_color_byte(rgba[1]);
+            const std::uint32_t blue = make_color_byte(rgba[2]);
+            const std::uint32_t alpha = make_color_byte(rgba[3]);
+            return (alpha << 24) | (red << 16) | (green << 8) | blue;
+        }
+
+        // writes one [default] key, then the app reloads after this frame
+        void commit_value(const SettingsWindowState& state, const wchar_t* key, const std::wstring& value) {
+            if (!write_config_value(state.config_path, default_section, key, value)) {
+                return; // logged; the app keeps the file values
+            }
+            PostMessageW(state.app_window, settings_committed_message, 0, 0);
+        }
+
+        void draw_checkbox(const SettingsWindowState& state, const char* label, const wchar_t* key, bool& value) {
+            if (ImGui::Checkbox(label, &value)) {
+                commit_value(state, key, make_bool_text(value));
+            }
+        }
+
+        // clamped to the config range, so the window never writes a rejected value
+        void draw_int_slider(const SettingsWindowState& state, const char* label, const wchar_t* key, int& value,
+            IntRange range, const char* format) {
+            ImGui::SliderInt(label, &value, range.min, range.max, format, ImGuiSliderFlags_AlwaysClamp);
+            if (ImGui::IsItemDeactivatedAfterEdit()) {
+                commit_value(state, key, std::to_wstring(value));
+            }
+        }
+
+        void draw_style_combo(SettingsWindowState& state) {
+            BackgroundSettings& settings = state.background_settings;
+            const std::string current_name = make_utf8_text(background_style_name(settings.style));
+            if (!ImGui::BeginCombo("Style", current_name.c_str())) {
+                return;
+            }
+            for (const BackgroundStyleName& entry : background_style_names) {
+                const bool is_selected = entry.style == settings.style;
+                const std::string name = make_utf8_text(entry.name);
+                if (ImGui::Selectable(name.c_str(), is_selected) && !is_selected) {
+                    settings.style = entry.style;
+                    commit_value(state, L"background", entry.name);
+                }
+            }
+            ImGui::EndCombo();
+        }
+
+        void draw_color_edit(SettingsWindowState& state) {
+            std::uint32_t& color_argb = state.background_settings.color_argb;
+            float rgba[4] = {
+                static_cast<float>((color_argb >> 16) & 0xFF) / 255.0f,
+                static_cast<float>((color_argb >> 8) & 0xFF) / 255.0f,
+                static_cast<float>(color_argb & 0xFF) / 255.0f,
+                static_cast<float>((color_argb >> 24) & 0xFF) / 255.0f,
+            };
+            const ImGuiColorEditFlags flags = ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf;
+            if (ImGui::ColorEdit4("Color", rgba, flags)) {
+                color_argb = make_color_argb(rgba);
+            }
+            // also after a drag in the picker popup, see EndGroup in imgui.cpp
+            if (ImGui::IsItemDeactivatedAfterEdit()) {
+                commit_value(state, L"background_color", make_color_text(color_argb));
+            }
+        }
+
+         // every [default] key
+        void draw_settings(SettingsWindowState& state) {
+            MonitorSettings& monitor = state.monitor_settings;
+            BackgroundSettings& background = state.background_settings;
+
+            ImGui::SeparatorText("Hiding");
+            draw_checkbox(state, "Auto hide", L"auto_hide", monitor.auto_hide);
+            ImGui::BeginDisabled(!monitor.auto_hide); // no effect without auto hide
+            draw_checkbox(state, "Cover taskbar area", L"cover_taskbar_area", monitor.cover_taskbar_area);
+            ImGui::EndDisabled();
+            draw_int_slider(state, "Hot zone", L"hot_zone_pixels", monitor.hot_zone_pixels, hot_zone_pixels_range, "%d px");
+            draw_int_slider(state, "Show delay", L"show_delay_ms", monitor.show_delay_ms, delay_ms_range, "%d ms");
+            draw_int_slider(state, "Hide delay", L"hide_delay_ms", monitor.hide_delay_ms, delay_ms_range, "%d ms");
+
+            ImGui::SeparatorText("Animation");
+            draw_int_slider(state, "Show animation", L"show_animation_ms", monitor.show_animation_ms, animation_ms_range, "%d ms");
+            draw_int_slider(state, "Hide animation", L"hide_animation_ms", monitor.hide_animation_ms, animation_ms_range, "%d ms");
+
+            ImGui::SeparatorText("Background");
+            draw_style_combo(state);
+            draw_color_edit(state);
+            draw_int_slider(state, "Blur", L"background_blur_pixels", background.blur_pixels, blur_pixels_range, "%d px");
+            draw_checkbox(state, "Feather", L"background_feather", background.feather);
+            ImGui::BeginDisabled(!background.feather); // no effect without feather
+            draw_int_slider(state, "Feather size", L"background_feather_percent", background.feather_percent,
+                feather_percent_range, "%d%%");
+            ImGui::EndDisabled();
+
+            ImGui::Spacing();
+            if (ImGui::Button("Open config file")) {
+                PostMessageW(state.window, open_config_message,0, 0); // runs after this frame
+            }
+        }
+
+        void open_config_file(const SettingsWindowState& state) {
+            INT_PTR result = 0;
+            if (!open_path(state.config_path, &result)) {
+                append_log(LogLevel::error, L"open_config_file", {{L"shell_error", std::to_wstring(result)}});
+            }
+        }
+
         // false when the device is gone
         bool draw_frame(SettingsWindowState& state) {
             if (state.render_target == nullptr) {
@@ -231,7 +365,7 @@ namespace ninja {
             ImGui::SetNextWindowPos(viewport->Pos);
             ImGui::SetNextWindowSize(viewport->Size);
             ImGui::Begin("settings", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove);
-            ImGui::TextUnformatted("Taskbar Ninja settings");
+            draw_settings(state);
             ImGui::End();
             ImGui::Render();
 
@@ -269,6 +403,7 @@ namespace ninja {
             if (message == WM_NCCREATE) {
                 const auto* create = reinterpret_cast<const CREATESTRUCTW*>(lparam);
                 auto* state = new SettingsWindowState(); // owned by the window, deleted on WM_NCDESTROY
+                state->window = window;
                 state->app_window = static_cast<HWND>(create->lpCreateParams); // from open_settings_window
                 SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(state));
                 return DefWindowProcW(window, message, wparam, lparam);
@@ -331,6 +466,9 @@ namespace ninja {
             case settings_reload_message:
                 load_settings(*state);
                 request_frames(window, *state);
+                return 0;
+            case open_config_message:
+                open_config_file(*state);
                 return 0;
             case WM_DESTROY:
                 on_destroy(*state);
