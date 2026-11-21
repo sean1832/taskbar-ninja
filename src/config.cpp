@@ -19,20 +19,16 @@ namespace ninja {
 
         // ASCII only: the profile API reads ASCII and UTF-8 files the same way
         constexpr char default_config_text[] =
-            "; [default] applies to every monitor. Monitor names are in log.txt, on the monitor lines.\r\n"
-            "; See detail: https://github.com/sean1832/taskbar-ninja#config\r\n"
+            "; see: https://github.com/sean1832/taskbar-ninja#config\r\n"
             "[default]\r\n"
             "auto_hide = true\r\n"
             "cover_taskbar_area = true\r\n" // need auto_hide = true
             "show_delay_ms = 0\r\n"
             "hide_delay_ms = 300\r\n"
             "hot_zone_pixels = 2\r\n"
-            "; 0 = no animation\r\n"
             "show_animation_ms = 300\r\n"
             "hide_animation_ms = 300\r\n"
-            "; original, clear, tint, acrylic or blur\r\n"
             "background = original\r\n"
-            "; AARRGGBB in hex\r\n"
             "background_color = 40202020\r\n"
             "background_blur_pixels = 10\r\n"
             "background_feather = true\r\n"
