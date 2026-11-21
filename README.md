@@ -16,7 +16,7 @@
 - Windows can fill the strip the hidden taskbar leaves (`cover_taskbar_area`).
 - Background styles: `original`, `clear`, `tint`, `acrylic`, `blur`. Blur can fade in from the inner edge.
 - Works with the taskbar on any screen edge.
-- Applies config changes when you save the file. No restart.
+- A settings window. Changes apply at once, with no restart.
 - A watchdog process restores the taskbar if the app crashes or freezes.
 
 ## Installation
@@ -25,15 +25,33 @@
 3. Run `taskbar-ninja.exe`. The app adds an icon to the tray.
 
 ## Usage
+### Settings window
+Right-click the tray icon and choose **Settings**. A change applies when you let go of the control.
+
+| Part | What it does |
+|---|---|
+| Monitor | Picks what the controls below change. **All monitors** is the base for every monitor. Then each connected monitor by model name, the primary first. Monitors that have a section in `config.ini` but are not connected come last. Hidden when you have one monitor and no monitor sections. |
+| Hiding, Animation | When the taskbar hides and shows, and how fast it slides. See [Config](#config) for each value. |
+| Background | Look of every taskbar. The taskbar shows the change while you drag. Only for **All monitors**. |
+| Configuration | **Start with Windows** starts the app when you sign in. **Open config file** opens `config.ini`. **Restore Default** asks first, then moves `config.ini` to `config.ini.bak` and writes the default file. This removes every monitor section too. |
+
+With a monitor picked:
+- A grey value comes from **All monitors**. Change it to give that monitor its own value.
+- Click **x** next to a value to use the **All monitors** value again.
+
+With **All monitors** picked, `(set on N)` after a control means N monitors keep their own value for it. Hover it to see which ones.
+
+A red line at the top means `config.ini` has a value the app rejected, for example from a hand edit. The app keeps the last good settings. Set the control again to write a good value.
+
 ### Tray menu
 | Item | Action |
 |---|---|
 | Pause | Shows every taskbar and restores the original background. Click again to resume. |
-| Settings | Opens the settings window. "Open config file" there opens `config.ini`. "Start with Windows" starts the app when you sign in. |
+| Settings | Opens the settings window. |
 | Exit | Restores the taskbar and background, then closes the app. |
 
 ### Config
-The app writes `%APPDATA%\taskbar-ninja\config.ini` on first start.
+The app writes `%APPDATA%\taskbar-ninja\config.ini` on first start. The settings window edits this file for you. You can also edit it by hand. A hand edit applies when you open the settings window or click back on it, and when the app starts.
 
 ```ini
 [default]
@@ -44,7 +62,7 @@ hide_delay_ms = 300
 hot_zone_pixels = 2
 show_animation_ms = 300
 hide_animation_ms = 300
-background = blur
+background = original
 background_color = 40202020
 background_blur_pixels = 10
 background_feather = true
@@ -66,7 +84,7 @@ background_feather_percent = 50
 | `background_feather` | `true`, `false` | Fade the blur in from the inner edge. |
 | `background_feather_percent` | 1 to 100 | Part of the bar thickness the fade covers. |
 
-To give one monitor its own settings, add a section named after its model, for example `[DELL U2720Q]`. Keys you leave out come from `[default]`. You can find the model names on the `monitor` lines in `%APPDATA%\taskbar-ninja\log.txt`.
+To give one monitor its own settings by hand, add a section named after its model, for example `[DELL U2720Q]`. The settings window makes these sections for you. Keys you leave out come from `[default]`. You can find the model names on the `monitor` lines in `%APPDATA%\taskbar-ninja\log.txt`.
 
 The `background_*` keys apply to every taskbar and only work in `[default]`.
 
@@ -74,7 +92,7 @@ A missing `show_animation_ms` or `hide_animation_ms` means 0, so a config from a
 
 `acrylic` and `blur` need **Settings > Personalization > Colors > Transparency effects** turned on.
 
-If a value is out of range, the app keeps the last good settings and writes the reason to `log.txt`.
+If a value is out of range, the app keeps the last good settings and writes the reason to `log.txt`. The settings window shows the reason in red.
 
 ### Command line
 | Command | Action |
