@@ -55,6 +55,13 @@ namespace ninja {
         // fixed size, no resize, no minimize
         constexpr DWORD window_style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
 
+        // ui text; imgui sizes a font by line height (ascent - descent), not em
+        // 16 px line height = Segoe UI at 9 pt, the Windows dialog size
+        constexpr float ui_font_pixels = 16.0f;
+
+        // in %WINDIR%\Fonts; first file that loads wins
+        constexpr const wchar_t* ui_font_files[] = {L"SegUIVar.ttf", L"segoeui.ttf"};
+
         // imgui shows some results on frame late
         constexpr int extra_frames_after_input = 2;
 
@@ -118,6 +125,26 @@ namespace ninja {
             wchar_t text[16] = {};
             std::swprintf(text, 16, L"0x%08lX", static_cast<unsigned long>(result));
             return text;
+        }
+
+        // imgui takes UTF-8
+        std::string make_utf8_text(std::wstring_view text) {
+            if (text.empty()) {
+                return {};
+            }
+            const int text_length = static_cast<int>(text.size());
+            const int byte_count = WideCharToMultiByte(CP_UTF8, 0, text.data(), text_length, nullptr, 0, nullptr, nullptr);
+            std::string utf8_text(static_cast<size_t>(byte_count), '\0');
+            WideCharToMultiByte(CP_UTF8, 0, text.data(), text_length, utf8_text.data(), byte_count, nullptr, nullptr);
+            return utf8_text;
+        }
+
+        std::vector<std::string> make_utf8_lines(const std::vector<std::wstring>& lines) {
+            std::vector<std::string> utf8_lines;
+            for (const std::wstring& line : lines) {
+                utf8_lines.push_back(make_utf8_text(line));
+            }
+            return utf8_lines;
         }
 
         bool create_device(HWND window, SettingsWindowState& state) {
@@ -194,6 +221,29 @@ namespace ninja {
             style.FontScaleDpi = dpi_scale;
         }
 
+        // Windows UI font; before the first frame. imgui bakes each size on use, so a dpi change needs no reload
+        void load_ui_font() {
+            wchar_t windows_folder[MAX_PATH] = {};
+            const UINT folder_length = GetWindowsDirectoryW(windows_folder, MAX_PATH);
+            if (folder_length == 0 || folder_length >= MAX_PATH) {
+                append_log(LogLevel::warning, L"settings_font_not_loaded", {
+                    {L"win32_error", std::to_wstring(GetLastError())}
+                });
+                return; // imgui uses its built-in font
+            }
+
+            ImFontConfig font_config;
+            font_config.Flags |= ImFontFlags_NoLoadError; // missing file: try the next one, no debug assert
+            for (const wchar_t* file_name : ui_font_files) {
+                const std::wstring path = std::wstring(windows_folder) + L"\\Fonts\\" + file_name;
+                const std::string utf8_path = make_utf8_text(path); // imgui opens files by UTF-8 path
+                if (ImGui::GetIO().Fonts->AddFontFromFileTTF(utf8_path.c_str(), ui_font_pixels, &font_config) != nullptr) {
+                    return;
+                }
+            }
+            append_log(LogLevel::warning, L"settings_font_not_loaded"); // imgui uses its built-in font
+        }
+
         // all or nothing: a failure undoes the parts already started
         bool start_imgui(HWND window, SettingsWindowState& state) {
             IMGUI_CHECKVERSION();
@@ -202,6 +252,7 @@ namespace ninja {
             io.IniFilename = nullptr; // no imgui.ini
             io.LogFilename = nullptr; // no imgui_log.txt
             io.ConfigInputTextCursorBlink = false; // a blink needs a frame every half second
+            load_ui_font();
             apply_style(dpi_scale_of(window));
 
             if (!ImGui_ImplWin32_Init(window)) {
@@ -216,26 +267,6 @@ namespace ninja {
                 return false;
             }
             return true;
-        }
-
-        // imgui takes UTF-8
-        std::string make_utf8_text(std::wstring_view text) {
-            if (text.empty()) {
-                return {};
-            }
-            const int text_length = static_cast<int>(text.size());
-            const int byte_count = WideCharToMultiByte(CP_UTF8, 0, text.data(), text_length, nullptr, 0, nullptr, nullptr);
-            std::string utf8_text(static_cast<size_t>(byte_count), '\0');
-            WideCharToMultiByte(CP_UTF8, 0, text.data(), text_length, utf8_text.data(), byte_count, nullptr, nullptr);
-            return utf8_text;
-        }
-
-        std::vector<std::string> make_utf8_lines(const std::vector<std::wstring>& lines) {
-            std::vector<std::string> utf8_lines;
-            for (const std::wstring& line : lines) {
-                utf8_lines.push_back(make_utf8_text(line));
-            }
-            return utf8_lines;
         }
 
         // section names ignore case, as in the profile api
