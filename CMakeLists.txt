@@ -55,6 +55,8 @@ add_executable(taskbar-ninja WIN32
         src/explorer_load.h
         src/animation.cpp
         src/animation.h
+        src/settings_window.cpp
+        src/settings_window.h
 )
 
 target_compile_definitions(taskbar-ninja PRIVATE
