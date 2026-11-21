@@ -88,6 +88,9 @@ namespace ninja {
         TaskbarEdge edge = TaskbarEdge::bottom; ///< monitor edge the taskbars dock at, which sets the feather direction
     };
 
+    /**
+     * Easing curve of one animation, as the 2 control points of a cubic bezier.
+     */
     struct AnimationCurve {
         float start_control_x = 0.0f;
         float start_control_y = 0.0f;
