@@ -70,6 +70,7 @@ namespace ninja {
             ULONGLONG config_write_time = 0; // file write time the settings below match; 0 = file missing
             MonitorSettings monitor_settings; // [default] keys as the file has them
             BackgroundSettings background_settings; // background keys as the file has them
+            BackgroundSettings previewed_background; // last look sent to the app; a difference sends a preview
             bool autostart_enabled = false; // not a config key. set at runtime by checking registry.
             ComPtr<ID3D11Device> device;
             ComPtr<ID3D11DeviceContext> device_context;
@@ -194,6 +195,7 @@ namespace ninja {
             // empty model name: [default] only
             state.monitor_settings = read_monitor_settings(state.config_path, L"").value_or(MonitorSettings{});
             state.background_settings = read_background_settings(state.config_path).value_or(BackgroundSettings{});
+            state.previewed_background = state.background_settings; // file look: nothing to preview
         }
 
         // a hand edit since the last read: show the file, and the app reloads too
@@ -409,6 +411,13 @@ namespace ninja {
             }
             ImGui::SameLine();
             draw_restore_defaults(state);
+
+            // a background control moved: draft look on the taskbar now, the file only on commit
+            if (background != state.previewed_background) {
+                state.previewed_background = background;
+                // same thread: direct call, pumps no messages, so safe inside the frame
+                SendMessageW(state.app_window, settings_preview_message, 0, reinterpret_cast<LPARAM>(&background));
+            }
         }
 
         void open_config_file(const SettingsWindowState& state) {
@@ -543,6 +552,8 @@ namespace ninja {
                 return 0;
             case WM_DESTROY:
                 on_destroy(*state);
+                //  a preview with no commit (closed during a drag): bars back to the file look
+                PostMessageW(state->app_window, config_changed_message, 0, 0);
                 append_log(LogLevel::info, L"settings_window_closed");
                 return 0; // not PostQuitMessage: the app keeps running
             default:

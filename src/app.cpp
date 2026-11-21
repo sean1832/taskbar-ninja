@@ -490,6 +490,19 @@ namespace ninja {
             rebuild_monitors(state);
         }
 
+        void on_settings_preview(AppState& state, const BackgroundSettings& draft) {
+            if (state.paused) {
+                return; // keep the original look until resume
+            }
+            if (draft.style == BackgroundStyle::original) {
+                return; // Explorer draws it, style change commits and reloads
+            }
+            const BackgroundLook look = make_background_look(draft, state.background_edge);
+            if (!set_background(look)) {
+                return; // no dll yet, the commit reload loads it
+            }
+        }
+
         // reads the mouse and the holds, then hides or shows each taskbar
         void apply_visibility(AppState& state) {
             POINT cursor_pixels = {};
@@ -707,6 +720,9 @@ namespace ninja {
                 return 0;
             case config_changed_message:
                 on_config_changed(*state);
+                return 0;
+            case settings_preview_message:
+                on_settings_preview(*state, *reinterpret_cast<const BackgroundSettings*>(lparam));
                 return 0;
             case WM_TIMER:
                 if (wparam == mouse_timer_id) {
