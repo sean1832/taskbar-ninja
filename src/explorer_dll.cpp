@@ -376,7 +376,7 @@ namespace ninja {
             composition::Visual visual = xaml::Hosting::ElementCompositionPreview::GetElementVisual(bar.content);
 
             numerics::float3 end_translation{0.0f, 0.0f, 0.0f};
-            if (row.is_slid_out) {
+            if (row.is_hidden) {
                 end_translation = make_out_translation(bar.content, row.edge);
                 bool has_size = end_translation.x != 0.0f || end_translation.y != 0.0f;
                 if (!has_size) {
@@ -422,7 +422,7 @@ namespace ninja {
         void apply_animation_table(const AnimationTable& table) {
             for (Taskbar& bar: bars) {
                 AnimationRow row = find_row(table, bar.taskbar);
-                bool is_same = row.is_slid_out == bar.row.is_slid_out && row.edge == bar.row.edge;
+                bool is_same = row.is_hidden == bar.row.is_hidden && row.edge == bar.row.edge;
                 if (is_same) {
                     continue;
                 }
@@ -487,7 +487,7 @@ namespace ninja {
                     AnimationRow row = find_row(current_table, taskbar);
                     // a bar that appears later goes to its state at once
                     row.duration_ms = 0;
-                    if (row.is_slid_out && slide_content(bar, row)) {
+                    if (row.is_hidden && slide_content(bar, row)) {
                         bar.row = row;
                     }
                     // a new frame for a known taskbar takes its place

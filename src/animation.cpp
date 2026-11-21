@@ -25,17 +25,17 @@ namespace ninja {
         }
     } // namespace
 
-    AnimationRow make_animation_row(HWND taskbar, bool is_slid_out, int duration_ms, TaskbarEdge edge) {
+    AnimationRow make_animation_row(HWND taskbar, bool is_hidden, int duration_ms, TaskbarEdge edge) {
         AnimationRow row;
         // HWND as a number, the same value is valid in Explorer
         row.taskbar_window = reinterpret_cast<std::uintptr_t>(taskbar);
-        row.is_slid_out = is_slid_out;
+        row.is_hidden = is_hidden;
         row.duration_ms = 0;
         if (duration_ms > 0) {
             row.duration_ms = static_cast<std::uint32_t>(duration_ms);
         }
         row.curve = show_curve;
-        if (is_slid_out) {
+        if (is_hidden) {
             row.curve = hide_curve;
         }
         row.edge = edge;

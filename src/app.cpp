@@ -7,6 +7,7 @@
 #include <optional>
 #include <vector>
 
+#include "animation.h"
 #include "autostart.h"
 #include "background.h"
 #include "config.h"
@@ -49,12 +50,20 @@ namespace ninja {
         // posted by the load worker once Explorer has the dll
         constexpr UINT explorer_ready_message = WM_APP + 2; // WM_APP + 1 is tray_message in tray.h
 
-        // one monitor, its settings, and whether its taskbar is hidden now
+        // taskbar window and its content. the window flags stay the hidden state
+        enum class TaskbarState {
+            shown,  ///< window visible, content in place
+            hiding, ///< window visible, content animates out
+            hidden, ///< window alpha 0 and click-through
+        };
+
+        // one monitor, its settings, and the state of its taskbar now
         struct MonitorState {
             Monitor monitor;
             MonitorSettings settings;
             Visibility visibility;
-            bool taskbar_hidden = false;
+            TaskbarState taskbar_state = TaskbarState::shown;
+            ULONGLONG hide_started_at_ms = 0; // tick count, valid while hiding
             bool work_area_covered = false;
         };
 
@@ -115,7 +124,11 @@ namespace ninja {
                 MonitorState monitor_state;
                 monitor_state.monitor = monitor;
                 // real state: a rebuild can find a taskbar that this app hid before
-                monitor_state.taskbar_hidden = monitor.taskbar != nullptr && is_taskbar_hidden(monitor.taskbar);
+                bool is_hidden = monitor.taskbar != nullptr && is_taskbar_hidden(monitor.taskbar);
+                monitor_state.taskbar_state = TaskbarState::shown;
+                if (is_hidden) {
+                    monitor_state.taskbar_state = TaskbarState::hidden;
+                }
                 monitor_state.work_area_covered = monitor.taskbar != nullptr && is_work_area_covered(monitor.handle);
                 std::optional<MonitorSettings> settings = read_monitor_settings(config_path, monitor.model_name);
                 if (settings.has_value()) {
@@ -129,37 +142,71 @@ namespace ninja {
             return states;
         }
 
-        // no change when the taskbar is already in the wanted state
-        void set_taskbar_hidden(MonitorState& monitor_state, bool should_hide) {
+        bool uses_animation(const MonitorSettings& settings) {
+            return settings.show_animation_ms > 0 || settings.hide_animation_ms > 0;
+        }
+
+        [[nodiscard]] bool show_monitor_taskbar(MonitorState& monitor_state) {
             HWND taskbar = monitor_state.monitor.taskbar;
-            if (taskbar == nullptr) {
-                return;
+            switch (monitor_state.taskbar_state) {
+            case TaskbarState::shown:
+                return false;
+            case TaskbarState::hiding:
+                break; // window never hidden, only the content turns around
+            case TaskbarState::hidden:
+                show_taskbar(taskbar);
+                if (monitor_state.work_area_covered) {
+                    raise_taskbar(taskbar); // a window that fills the monitor would sit above the taskbar
+                }
+                break;
             }
-            if (should_hide == monitor_state.taskbar_hidden) {
-                return;
+            monitor_state.taskbar_state = TaskbarState::shown;
+            append_log(LogLevel::info, L"show", {{L"monitor", monitor_state.monitor.model_name}});
+            return true;
+        }
+
+        // moves one taskbar one step towards hidden. true when its content must move
+        [[nodiscard]] bool hide_monitor_taskbar(MonitorState& monitor_state, ULONGLONG now_ms) {
+            const MonitorSettings& settings = monitor_state.settings;
+            TaskbarState previous_state = monitor_state.taskbar_state;
+            if (previous_state == TaskbarState::hidden) {
+                return false;
+            }
+            if (previous_state == TaskbarState::shown && settings.hide_animation_ms > 0) {
+                monitor_state.taskbar_state = TaskbarState::hiding;
+                monitor_state.hide_started_at_ms = now_ms;
+                return true; // window hides on the first tick after the animation
+            }
+            ULONGLONG elapsed_ms = now_ms - monitor_state.hide_started_at_ms;
+            bool is_animating = previous_state == TaskbarState::hiding &&
+                elapsed_ms < static_cast<ULONGLONG>(settings.hide_animation_ms);
+            if (is_animating) {
+                return false;
             }
 
             const std::wstring& model_name = monitor_state.monitor.model_name;
-            if (!should_hide) {
-                show_taskbar(taskbar);
-                // a window that fills the monitor would sit above the bar
-                if (monitor_state.work_area_covered) {
-                    raise_taskbar(taskbar);
-                }
-                monitor_state.taskbar_hidden = false;
-                append_log(LogLevel::info, L"show", {{L"monitor", model_name}});
-                return;
-            }
-
-            if (!hide_taskbar(taskbar)) {
+            if (!hide_taskbar(monitor_state.monitor.taskbar)) {
                 append_log(LogLevel::error, L"hide_rejected", {
                     {L"monitor", model_name},
                     {L"win32_error", std::to_wstring(GetLastError())}
                 });
-                return;
+                return false;
             }
-            monitor_state.taskbar_hidden = true;
+            monitor_state.taskbar_state = TaskbarState::hidden;
             append_log(LogLevel::info, L"hide", {{L"monitor", model_name}});
+            // instant hide with a show animation: content goes out at once, so the show animation has a start
+            return previous_state == TaskbarState::shown && uses_animation(settings);
+        }
+
+        // no change when the taskbar is already in the wanted state. true when its content must move
+        [[nodiscard]] bool set_taskbar_hidden(MonitorState& monitor_state, bool should_hide, ULONGLONG now_ms) {
+            if (monitor_state.monitor.taskbar == nullptr) {
+                return false;
+            }
+            if (should_hide) {
+                return hide_monitor_taskbar(monitor_state, now_ms);
+            }
+            return show_monitor_taskbar(monitor_state);
         }
 
         // no change when the work area is already in the wanted state; resets only a monitor this app covered
@@ -193,6 +240,44 @@ namespace ninja {
                 return;
             }
             append_log(LogLevel::info, L"work_area_covered", {{L"monitor", model_name}});
+        }
+
+        // one row for each taskbar whose monitor uses an animation
+        AnimationTable make_animation_table(const AppState& state) {
+            AnimationTable table;
+            for (const MonitorState& monitor_state : state.monitors) {
+                HWND taskbar = monitor_state.monitor.taskbar;
+                bool has_row = taskbar != nullptr && uses_animation(monitor_state.settings);
+                if (!has_row) {
+                    continue; // no row: the dll keeps its content in
+                }
+                if (table.row_count == max_animation_rows) {
+                    break; // more taskbars than rows: the rest never animate
+                }
+                bool is_hidden = monitor_state.taskbar_state != TaskbarState::shown;
+                int duration_ms = monitor_state.settings.show_animation_ms;
+                if (is_hidden) {
+                    duration_ms = monitor_state.settings.hide_animation_ms;
+                }
+                RECT taskbar_bounds_pixels = {};
+                GetWindowRect(taskbar, &taskbar_bounds_pixels);
+                TaskbarEdge edge = resolve_taskbar_edge(monitor_state.monitor.bounds_pixels, taskbar_bounds_pixels);
+                table.rows[table.row_count] = make_animation_row(taskbar, is_hidden, duration_ms, edge);
+                table.row_count += 1;
+            }
+            return table;
+        }
+
+        // sends the table, loads the dll when Explorer has none
+        void apply_animation(AppState& state) {
+            AnimationTable table = make_animation_table(state);
+            if (send_animation_table(table)) {
+                return;
+            }
+            if (table.row_count == 0) {
+                return; // no dll and no animation: nothing to move
+            }
+            load_explorer(state.window, explorer_ready_message); // ready message calls this again
         }
 
         // true when not paused and at least one monitor auto-hides a taskbar
@@ -258,7 +343,7 @@ namespace ninja {
                 }
                 RECT taskbar_bounds_pixels = {};
                 GetWindowRect(monitor_state->monitor.taskbar, &taskbar_bounds_pixels);
-                bool is_taskbar_shown = !monitor_state->taskbar_hidden;
+                bool is_taskbar_shown = monitor_state->taskbar_state != TaskbarState::hidden; // panels move at the end of a hide
                 align_panel(panel, monitor_state->monitor.bounds_pixels, taskbar_bounds_pixels, is_taskbar_shown);
             }
         }
@@ -267,6 +352,8 @@ namespace ninja {
         // covers the work area of each auto-hiding monitor that wants it, hides each auto-hide taskbar the hot zone
         // does not want shown, shows the others, then fixes the timer
         void apply_hiding(AppState& state) {
+            ULONGLONG now_ms = GetTickCount64();
+            bool is_content_changed = false;
             for (MonitorState& monitor_state : state.monitors) {
                 bool is_auto_hiding = !state.paused && monitor_state.settings.auto_hide;
                 // cover first, so a taskbar that shows below knows to go topmost
@@ -274,8 +361,16 @@ namespace ninja {
                 set_work_area_covered(monitor_state, should_cover);
 
                 bool should_hide = is_auto_hiding && !monitor_state.visibility.is_shown;
-                set_taskbar_hidden(monitor_state, should_hide);
+                if (set_taskbar_hidden(monitor_state, should_hide, now_ms)) {
+                    is_content_changed = true;
+                }
             }
+
+            // after the windows, a show makes the window opaque first, then the content slide in
+            if (is_content_changed) {
+                apply_animation(state);
+            }
+
             // after the taskbar, panels follow the new state
             align_panels(state);
             apply_mouse_timer(state);
@@ -348,6 +443,7 @@ namespace ninja {
         void rebuild_monitors(AppState& state) {
             state.monitors = build_monitor_states(state.config_path, state.monitors);
             apply_hiding(state);
+            apply_animation(state);
             apply_background(state);
         }
 
@@ -641,6 +737,7 @@ namespace ninja {
                 on_tray_activated(*state, lparam);
                 return 0;
             case explorer_ready_message:
+                apply_animation(*state);
                 apply_background(*state);
                 return 0;
             case WM_TIMER:

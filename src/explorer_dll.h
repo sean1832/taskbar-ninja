@@ -96,15 +96,15 @@ namespace ninja {
     };
 
     /**
-     * Where the content of one taskbar must be, and how it slides there.
+     * Where the content of one taskbar must be, and how it animates there.
      */
     struct AnimationRow {
         // HWND as a number: the same value is valid in the app and in Explorer
         std::uint64_t taskbar_window = 0;       ///< Shell_TrayWnd or Shell_SecondaryTrayWnd
-        bool is_slid_out = false;               ///< content past the docked edge
-        std::uint32_t duration_ms = 0;          ///< slide time. 0 = move at once
-        AnimationCurve curve;                   ///< easing of the slide to this state
-        TaskbarEdge edge = TaskbarEdge::bottom; ///< monitor edge the taskbar docks at, which sets the slide direction
+        bool is_hidden = false;                 ///< content gone from view. false = content in place
+        std::uint32_t duration_ms = 0;          ///< animation time. 0 = change at once
+        AnimationCurve curve;                   ///< easing of the animation to this state
+        TaskbarEdge edge = TaskbarEdge::bottom; ///< monitor edge the taskbar docks at, which sets the direction
     };
 
     /**
