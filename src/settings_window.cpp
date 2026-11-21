@@ -34,6 +34,12 @@ namespace ninja {
         constexpr wchar_t settings_window_class[] = L"taskbar-ninja-settings";
         constexpr wchar_t settings_window_title[] = L"Taskbar Ninja Settings";
 
+        // keys a monitor section can set; background keys are [default] only
+        constexpr const wchar_t* monitor_keys[] = {
+            L"auto_hide", L"cover_taskbar_area", L"show_delay_ms", L"hide_delay_ms",
+            L"hot_zone_pixels", L"show_animation_ms", L"hide_animation_ms"
+        };
+
         // icon id from resources/app.rc
         constexpr WORD app_icon_id = 1;
 
@@ -81,7 +87,8 @@ namespace ninja {
             HWND app_window = nullptr; // gets config_changed_message
             std::wstring config_path;
             ULONGLONG config_write_time = 0; // file write time the settings below match; 0 = file missing
-            MonitorSettings monitor_settings; // [default] keys as the file has them
+            MonitorSettings monitor_settings; // values the selected target uses: its section, then [default]
+            std::vector<const wchar_t*> set_keys; // monitor_keys the selected section sets; empty for All monitors
             BackgroundSettings background_settings; // background keys as the file has them
             BackgroundSettings previewed_background; // last look sent to the app; a difference sends a preview
             std::vector<SettingsTarget> targets; // [0] = All monitors, then connected, then not connected
@@ -301,15 +308,37 @@ namespace ninja {
             }
         }
 
+        std::wstring target_selection(const SettingsWindowState& state) {
+            const std::wstring& section = state.targets[state.target_index].section;
+            if (section.empty()) {
+                return default_section;
+            }
+            return section;
+        }
+
+        void load_target_settings(SettingsWindowState& state) {
+            const std::wstring& section = state.targets[state.target_index].section; // empty: [default] only
+            state.monitor_settings = read_monitor_settings(state.config_path, section).value_or(MonitorSettings{});
+            state.set_keys.clear();
+            if (section.empty()) {
+                return; // All monitors: [default] is the base, nothing inherits
+            }
+
+            for (const wchar_t* key: monitor_keys) {
+                if (has_config_value(state.config_path, section.c_str(), key)) {
+                    state.set_keys.push_back(key);
+                }
+            }
+        }
+
         void load_settings(SettingsWindowState& state) {
             state.config_path = config_path();
             // time first: a save during the read gives a new time, so the next focus reads again
             state.config_write_time = read_config_write_time(state.config_path);
-            // empty model name: [default] only
-            state.monitor_settings = read_monitor_settings(state.config_path, L"").value_or(MonitorSettings{});
             state.background_settings = read_background_settings(state.config_path).value_or(BackgroundSettings{});
             state.previewed_background = state.background_settings; // file look: nothing to preview
             load_monitor_targets(state); // sections can change with the file
+            load_target_settings(state); // selection can change with the targets
         }
 
         // a hand edit since the last read: show the file, and the app reloads too
@@ -370,13 +399,52 @@ namespace ninja {
             return (alpha << 24) | (red << 16) | (green << 8) | blue;
         }
 
-        // writes one [default] key, then the app reloads after this frame
-        void commit_value(SettingsWindowState& state, const wchar_t* key, const std::wstring& value) {
-            if (!write_config_value(state.config_path, default_section, key, value)) {
+        // writes one key into the section, then the app reloads after this frame
+        void commit_value(SettingsWindowState& state, const wchar_t* section, const wchar_t* key, const std::wstring& value) {
+            if (!write_config_value(state.config_path, section, key, value)) {
                 return; // logged; the app keeps the file values
             }
             state.config_write_time = read_config_write_time(state.config_path); // own write: no reload on focus
+            load_target_settings(state); // key now set in the section
             PostMessageW(state.app_window, config_changed_message, 0, 0);
+        }
+
+        // key out of the section: the monitor follows [default] again
+        void reset_value(SettingsWindowState& state, const wchar_t* section, const wchar_t* key) {
+            if (!delete_config_value(state.config_path, section, key)) {
+                return; // logged
+            }
+            state.config_write_time = read_config_write_time(state.config_path); // own write: no reload on focus
+            load_target_settings(state); // shows the [default] value, grey
+            PostMessageW(state.app_window, config_changed_message, 0, 0);
+        }
+
+        // monitor section without the key: the [default] value shows
+        bool is_key_inherited(const SettingsWindowState& state, const wchar_t* section, const wchar_t* key) {
+            if (_wcsicmp(section, default_section) == 0) {
+                return false; // [default] is the base
+            }
+            for (const wchar_t* set_key : state.set_keys) {
+                if (std::wcscmp(set_key, key) == 0) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // x next to a key the monitor section sets
+        void draw_reset_button(SettingsWindowState& state, const wchar_t* section, const wchar_t* key, bool is_inherited) {
+            const bool is_section_key = !is_inherited && _wcsicmp(section, default_section) != 0;
+            if (!is_section_key) {
+                return;
+            }
+            ImGui::SameLine();
+            ImGui::PushID(static_cast<const void*>(key)); // one x per key
+            if (ImGui::SmallButton("x")) {
+                reset_value(state, section, key);
+            }
+            ImGui::SetItemTooltip("Use the All monitors value");
+            ImGui::PopID();
         }
 
         void restore_default(SettingsWindowState& state) {
@@ -387,19 +455,37 @@ namespace ninja {
             PostMessageW(state.app_window, config_changed_message, 0, 0);
         }
 
-        void draw_checkbox(SettingsWindowState& state, const char* label, const wchar_t* key, bool& value) {
-            if (ImGui::Checkbox(label, &value)) {
-                commit_value(state, key, make_bool_text(value));
+        void draw_checkbox(SettingsWindowState& state, const wchar_t* section, const char* label, const wchar_t* key, bool& value) {
+            const bool is_inherited = is_key_inherited(state, section, key);
+            if (is_inherited) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
             }
+
+            const bool is_clicked = ImGui::Checkbox(label, &value);
+            if (is_inherited) {
+                ImGui::PopStyleColor();
+            }
+            if (is_clicked) {
+                commit_value(state, section, key, make_bool_text(value));
+            }
+            draw_reset_button(state, section, key, is_inherited);
         }
 
         // clamped to the config range, so the window never writes a rejected value
-        void draw_int_slider(SettingsWindowState& state, const char* label, const wchar_t* key, int& value,
-            IntRange range, const char* format) {
-            ImGui::SliderInt(label, &value, range.min, range.max, format, ImGuiSliderFlags_AlwaysClamp);
-            if (ImGui::IsItemDeactivatedAfterEdit()) {
-                commit_value(state, key, std::to_wstring(value));
+        void draw_int_slider(SettingsWindowState& state, const wchar_t* section, const char* label, const wchar_t* key, int& value, IntRange range, const char* format) {
+            const bool is_inherited = is_key_inherited(state, section, key);
+            if (is_inherited) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
             }
+            ImGui::SliderInt(label, &value, range.min, range.max, format, ImGuiSliderFlags_AlwaysClamp);
+            const bool is_committed = ImGui::IsItemDeactivatedAfterEdit(); // before PopStyleColor: same item
+            if (is_inherited) {
+                ImGui::PopStyleColor();
+            }
+            if (is_committed) {
+                commit_value(state, section, key, std::to_wstring(value));
+            }
+            draw_reset_button(state, section, key, is_inherited);
         }
 
         void draw_style_combo(SettingsWindowState& state) {
@@ -413,7 +499,7 @@ namespace ninja {
                 const std::string name = make_utf8_text(entry.name);
                 if (ImGui::Selectable(name.c_str(), is_selected) && !is_selected) {
                     settings.style = entry.style;
-                    commit_value(state, L"background", entry.name);
+                    commit_value(state, default_section, L"background", entry.name);
                 }
             }
             ImGui::EndCombo();
@@ -433,7 +519,7 @@ namespace ninja {
             }
             // also after a drag in the picker popup, see EndGroup in imgui.cpp
             if (ImGui::IsItemDeactivatedAfterEdit()) {
-                commit_value(state, L"background_color", make_color_text(color_argb));
+                commit_value(state, default_section, L"background_color", make_color_text(color_argb));
             }
         }
 
@@ -496,6 +582,7 @@ namespace ninja {
                     ImGui::PushID(static_cast<int>(i)); // [Dell] and [DELL] give same label
                     if (ImGui::Selectable(target.label.c_str(), i == state.target_index)) {
                         state.target_index = i;
+                        load_target_settings(state);
                     }
                     ImGui::PopID();
                 }
@@ -512,28 +599,38 @@ namespace ninja {
             BackgroundSettings& background = state.background_settings;
 
             draw_monitor_target_combo(state);
+            // copy: restore defaults rebuilds the targets inside this frame
+            const std::wstring target = target_selection(state);
+            const wchar_t* section = target.c_str();
 
             ImGui::SeparatorText("Hiding");
-            draw_checkbox(state, "Auto hide", L"auto_hide", monitor.auto_hide);
+            draw_checkbox(state, section, "Auto hide", L"auto_hide", monitor.auto_hide);
             ImGui::BeginDisabled(!monitor.auto_hide); // no effect without auto hide
-            draw_checkbox(state, "Cover taskbar area", L"cover_taskbar_area", monitor.cover_taskbar_area);
+            draw_checkbox(state, section, "Cover taskbar area", L"cover_taskbar_area", monitor.cover_taskbar_area);
             ImGui::EndDisabled();
-            draw_int_slider(state, "Hot zone", L"hot_zone_pixels", monitor.hot_zone_pixels, hot_zone_pixels_range, "%d px");
-            draw_int_slider(state, "Show delay", L"show_delay_ms", monitor.show_delay_ms, delay_ms_range, "%d ms");
-            draw_int_slider(state, "Hide delay", L"hide_delay_ms", monitor.hide_delay_ms, delay_ms_range, "%d ms");
+            draw_int_slider(state, section, "Hot zone", L"hot_zone_pixels", monitor.hot_zone_pixels, hot_zone_pixels_range, "%d px");
+            draw_int_slider(state, section, "Show delay", L"show_delay_ms", monitor.show_delay_ms, delay_ms_range, "%d ms");
+            draw_int_slider(state, section,"Hide delay", L"hide_delay_ms", monitor.hide_delay_ms, delay_ms_range, "%d ms");
 
             ImGui::SeparatorText("Animation");
-            draw_int_slider(state, "Show animation", L"show_animation_ms", monitor.show_animation_ms, animation_ms_range, "%d ms");
-            draw_int_slider(state, "Hide animation", L"hide_animation_ms", monitor.hide_animation_ms, animation_ms_range, "%d ms");
+            draw_int_slider(state, section, "Show animation", L"show_animation_ms", monitor.show_animation_ms, animation_ms_range, "%d ms");
+            draw_int_slider(state, section, "Hide animation", L"hide_animation_ms", monitor.hide_animation_ms, animation_ms_range, "%d ms");
 
+            // background keys: [default] only
+            const bool is_monitor_target = state.target_index != 0;
             ImGui::SeparatorText("Background");
+            if (is_monitor_target) {
+                ImGui::TextDisabled("Applies to all monitors.");
+            }
+            ImGui::BeginDisabled(is_monitor_target);
             draw_style_combo(state);
             draw_color_edit(state);
-            draw_int_slider(state, "Blur", L"background_blur_pixels", background.blur_pixels, blur_pixels_range, "%d px");
-            draw_checkbox(state, "Feather", L"background_feather", background.feather);
+            draw_int_slider(state, default_section, "Blur", L"background_blur_pixels", background.blur_pixels, blur_pixels_range, "%d px");
+            draw_checkbox(state, default_section, "Feather", L"background_feather", background.feather);
             ImGui::BeginDisabled(!background.feather); // no effect without feather
-            draw_int_slider(state, "Feather size", L"background_feather_percent", background.feather_percent,
+            draw_int_slider(state, default_section, "Feather size", L"background_feather_percent", background.feather_percent,
                 feather_percent_range, "%d%%");
+            ImGui::EndDisabled();
             ImGui::EndDisabled();
 
             ImGui::SeparatorText("Configuration");
@@ -676,6 +773,7 @@ namespace ninja {
             }
             case WM_DISPLAYCHANGE:
                 load_monitor_targets(*state);
+                load_target_settings(*state);
                 request_frames(window, *state);
                 return 0;
             case WM_ACTIVATE:

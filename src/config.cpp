@@ -286,6 +286,30 @@ namespace ninja {
         return true;
     }
 
+    bool has_config_value(const std::wstring& config_path, const wchar_t* section, const wchar_t* key) {
+        if (config_path.empty()) {
+            return false; // empty path: windows would read from its own folder
+        }
+        wchar_t value[max_value_characters] = {};
+        GetPrivateProfileStringW(section, key, L"", value, max_value_characters, config_path.c_str());
+        return value[0] != L'\0'; // empty reads as missing, as in read_text
+    }
+
+    bool delete_config_value(const std::wstring& config_path, const wchar_t* section, const wchar_t* key) {
+        if (config_path.empty()) {
+            return false; // empty path
+        }
+        // null value: the profile api removes the line
+        if (!WritePrivateProfileStringW(section, key, nullptr, config_path.c_str())) {
+            append_log(LogLevel::error, L"config_value_not_deleted", {
+                {L"key", key},
+                {L"win32_error", std::to_wstring(GetLastError())}
+            });
+            return false;
+        }
+        return true;
+    }
+
     std::wstring make_bool_text(bool value) {
         if (value) {
             return L"true";

@@ -112,6 +112,26 @@ namespace ninja {
         const std::wstring& value);
 
     /**
+     * Tells whether one section of config.ini sets one key.
+     * @param config_path path from write_default_config
+     * @param section default_section or a monitor model name
+     * @param key key name
+     * @return true when the key has a value that is not empty
+     * @remarks An empty value counts as missing, as in the readers.
+     */
+    [[nodiscard]] bool has_config_value(const std::wstring& config_path, const wchar_t* section, const wchar_t* key);
+
+    /**
+     * Removes one key from one section of config.ini and keeps every other line.
+     * @param config_path path from write_default_config
+     * @param section default_section or a monitor model name
+     * @param key key name
+     * @return true when the file no longer has the key
+     * @remarks Logs one line when the write is refused. Leaves the section line, even when it is empty.
+     */
+    [[nodiscard]] bool delete_config_value(const std::wstring& config_path, const wchar_t* section, const wchar_t* key);
+
+    /**
      * Makes the config text of a bool, "true" or "false".
      */
     [[nodiscard]] std::wstring make_bool_text(bool value);
