@@ -19,6 +19,7 @@
 #include "log.h"
 #include "monitor.h"
 #include "panel.h"
+#include "settings_window.h"
 #include "taskbar.h"
 #include "tray.h"
 #include "visibility.h"
@@ -688,6 +689,9 @@ namespace ninja {
                 state.paused = !state.paused;
                 apply_hiding(state);
                 apply_background(state);
+                return;
+            case TrayCommand::open_settings:
+                open_settings_window();
                 return;
             case TrayCommand::open_config_file: {
                 INT_PTR result = 0;

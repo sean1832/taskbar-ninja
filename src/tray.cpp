@@ -53,6 +53,7 @@ namespace ninja {
 
         HMENU menu = CreatePopupMenu();
         AppendMenuW(menu, pause_flags, static_cast<UINT_PTR>(TrayCommand::toggle_pause), L"Pause");
+        AppendMenuW(menu, MF_STRING, static_cast<UINT_PTR>(TrayCommand::open_settings), L"Settings");
         AppendMenuW(menu, MF_STRING, static_cast<UINT_PTR>(TrayCommand::open_config_file), L"Config");
         AppendMenuW(menu, autostart_flags, static_cast<UINT_PTR>(TrayCommand::toggle_autostart), L"Start With Windows");
         AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
@@ -76,6 +77,7 @@ namespace ninja {
         case TrayCommand::restore_and_exit:
         case TrayCommand::open_config_file:
         case TrayCommand::toggle_autostart:
+        case TrayCommand::open_settings:
             return chosen;
         }
         // unknown id: treat as no choice

@@ -19,6 +19,7 @@ namespace ninja {
         restore_and_exit = 2, ///< show the taskbar and close the app
         open_config_file = 3, ///< open config.ini in appdata folder
         toggle_autostart = 4, ///< toggle start the app on sign-in
+        open_settings = 5     ///< open the settings GUI window
     };
 
     /**
