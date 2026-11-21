@@ -1,14 +1,13 @@
 ﻿#include "config.h"
 
-#include <complex.h>
 #include <windows.h>
 
 #include <cstdint>
 #include <cwchar>
 #include <cwctype>
-#include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "files.h"
@@ -40,7 +39,7 @@ namespace ninja {
         struct SettingsSource {
             const std::wstring& config_path;
             const std::wstring& model_name;
-            bool has_rejected_value = false;
+            std::vector<std::wstring> rejections; // one message for each rejected value
         };
 
         // own section first, then [default]; empty when neither has the key
@@ -59,7 +58,7 @@ namespace ninja {
         }
 
         void reject_value(SettingsSource& source, const std::wstring& message) {
-            source.has_rejected_value = true;
+            source.rejections.push_back(message);
             append_log(LogLevel::warning, L"config_rejected", {
                 {L"monitor", source.model_name},
                 {L"message", message}
@@ -198,11 +197,11 @@ namespace ninja {
         return true;
     }
 
-    std::optional<MonitorSettings> read_monitor_settings(const std::wstring& config_path, const std::wstring& model_name) {
+    MonitorSettingsRead read_monitor_settings(const std::wstring& config_path, const std::wstring& model_name) {
         MonitorSettings default_settings;
         // no file path: an empty path makes windows read from its own folder
         if (config_path.empty()) {
-            return default_settings;
+            return {default_settings, {}};
         }
 
         SettingsSource source = {config_path, model_name};
@@ -215,17 +214,14 @@ namespace ninja {
         settings.show_animation_ms = read_int(source, L"show_animation_ms", animation_ms_range, default_settings.show_animation_ms);
         settings.hide_animation_ms = read_int(source, L"hide_animation_ms", animation_ms_range, default_settings.hide_animation_ms);
 
-        if (source.has_rejected_value) {
-            return std::nullopt;
-        }
-        return settings;
+        return {settings, std::move(source.rejections)};
     }
 
-    std::optional<BackgroundSettings> read_background_settings(const std::wstring& config_path) {
+    BackgroundSettingsRead read_background_settings(const std::wstring& config_path) {
         BackgroundSettings default_settings;
         // no file path: an empty path makes windows read from its own folder
         if (config_path.empty()) {
-            return default_settings;
+            return {default_settings, {}};
         }
 
         // empty model name: [default] only
@@ -238,10 +234,7 @@ namespace ninja {
         settings.feather = read_bool(source, L"background_feather", default_settings.feather);
         settings.feather_percent = read_int(source, L"background_feather_percent", feather_percent_range, default_settings.feather_percent);
 
-        if (source.has_rejected_value) {
-            return std::nullopt;
-        }
-        return settings;
+        return {settings, std::move(source.rejections)};
     }
 
     std::vector<std::wstring> read_monitor_sections(const std::wstring& config_path) {

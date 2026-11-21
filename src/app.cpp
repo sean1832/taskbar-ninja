@@ -4,7 +4,6 @@
 
 #include <cwchar>
 #include <string>
-#include <optional>
 #include <vector>
 
 #include "animation.h"
@@ -126,9 +125,9 @@ namespace ninja {
                     monitor_state.taskbar_state = TaskbarState::hidden;
                 }
                 monitor_state.work_area_covered = monitor.taskbar != nullptr && is_work_area_covered(monitor.handle);
-                std::optional<MonitorSettings> settings = read_monitor_settings(config_path, monitor.model_name);
-                if (settings.has_value()) {
-                    monitor_state.settings = *settings;
+                const MonitorSettingsRead settings_read = read_monitor_settings(config_path, monitor.model_name);
+                if (settings_read.rejections.empty()) {
+                    monitor_state.settings = settings_read.settings;
                 } else {
                     monitor_state.settings = find_previous_settings(previous, monitor.model_name);
                     append_log(LogLevel::warning, L"settings_rejected", {{L"monitor", monitor.model_name}});
@@ -401,10 +400,10 @@ namespace ninja {
         // rejected settings: the last good ones
         void apply_background(AppState& state) {
             state.background_edge = resolve_background_edge(state);
-            std::optional<BackgroundSettings> read_settings = read_background_settings(state.config_path);
+            const BackgroundSettingsRead settings_read = read_background_settings(state.config_path);
             BackgroundSettings settings = state.background_settings;
-            if (read_settings.has_value()) {
-                settings = *read_settings;
+            if (settings_read.rejections.empty()) {
+                settings = settings_read.settings;
             } else {
                 append_log(LogLevel::warning, L"background_settings_rejected");
             }

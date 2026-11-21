@@ -3,7 +3,6 @@
 #include <windows.h>
 
 #include <cstdint>
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -35,6 +34,22 @@ namespace ninja {
         int feather_percent = 50;              ///< part of the bar thickness the blur fades in over
 
         bool operator==(const BackgroundSettings&) const = default;
+    };
+
+    /**
+     * Monitor settings from config.ini, with a message for each value the file breaks.
+     */
+    struct MonitorSettingsRead {
+        MonitorSettings settings;             ///< a rejected value keeps its built-in value
+        std::vector<std::wstring> rejections; ///< one "<key> must <constraint>" for each rejected value
+    };
+
+    /**
+     * Background settings from config.ini, with a message for each value the file breaks.
+     */
+    struct BackgroundSettingsRead {
+        BackgroundSettings settings;          ///< a rejected value keeps its built-in value
+        std::vector<std::wstring> rejections; ///< one "<key> must <constraint>" for each rejected value
     };
 
     /**
@@ -79,18 +94,18 @@ namespace ninja {
      * Reads the settings of one monitor from its own section, then from [default], then from the built-in values.
      * @param config_path path from write_default_config
      * @param model_name monitor model name, which is also its section name
-     * @return settings, or nullopt when a value breaks its rule
-     * @remarks Logs one line for each rejected value.
+     * @return settings, and a message for each value that breaks its rule
+     * @remarks Logs one line for each rejected value. A caller that gets rejections keeps its last good settings.
      */
-    [[nodiscard]] std::optional<MonitorSettings> read_monitor_settings(const std::wstring& config_path, const std::wstring& model_name);
+    [[nodiscard]] MonitorSettingsRead read_monitor_settings(const std::wstring& config_path, const std::wstring& model_name);
 
     /**
      * Reads the background settings of every taskbar from [default], then from the built-in values.
      * @param config_path path from write_default_config
-     * @return settings, or nullopt when a value breaks its rule
+     * @return settings, and a message for each value that breaks its rule
      * @remarks One look for every taskbar. A monitor section does not override it. Logs one line for each rejected value.
      */
-    [[nodiscard]] std::optional<BackgroundSettings> read_background_settings(const std::wstring& config_path);
+    [[nodiscard]] BackgroundSettingsRead read_background_settings(const std::wstring& config_path);
 
     /**
      * Reads the names of the monitor sections in config.ini, every section but [default].

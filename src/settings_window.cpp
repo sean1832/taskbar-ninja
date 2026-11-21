@@ -11,6 +11,7 @@
 #include <string>
 #include <string_view>
 #include <optional>
+#include <vector>
 
 #include "imgui.h"
 #include "backends/imgui_impl_dx11.h"
@@ -39,6 +40,9 @@ namespace ninja {
             L"auto_hide", L"cover_taskbar_area", L"show_delay_ms", L"hide_delay_ms",
             L"hot_zone_pixels", L"show_animation_ms", L"hide_animation_ms"
         };
+
+        // rejected value lines
+        constexpr ImVec4 error_text_color = ImVec4(0.95f, 0.35f, 0.35f, 1.0f);
 
         // icon id from resources/app.rc
         constexpr WORD app_icon_id = 1;
@@ -91,6 +95,8 @@ namespace ninja {
             MonitorSettings monitor_settings; // values the selected target uses: its section, then [default]
             BackgroundSettings background_settings; // background keys as the file has them
             BackgroundSettings previewed_background; // last look sent to the app; a difference sends a preview
+            std::vector<std::string> background_rejections; // UTF-8 "<key> must <constraint>" from the last read
+            std::vector<std::string> monitor_rejections; // same, for the selected target
             std::vector<SettingsTarget> targets; // [0] = All monitors, then connected, then not connected
             size_t target_index = 0; // selected entry in targets
             int unnamed_monitor_count = 0; // connected monitors with no model name: [default] only
@@ -224,6 +230,14 @@ namespace ninja {
             return utf8_text;
         }
 
+        std::vector<std::string> make_utf8_lines(const std::vector<std::wstring>& lines) {
+            std::vector<std::string> utf8_lines;
+            for (const std::wstring& line : lines) {
+                utf8_lines.push_back(make_utf8_text(line));
+            }
+            return utf8_lines;
+        }
+
         // section names ignore case, as in the profile api
         std::optional<size_t> find_target(const std::vector<SettingsTarget>& targets, const std::wstring& section) {
             for (size_t i = 0; i < targets.size(); i++) {
@@ -351,16 +365,24 @@ namespace ninja {
 
         void load_target_settings(SettingsWindowState& state) {
             SettingsTarget& target = state.targets[state.target_index];
-            state.monitor_settings = read_monitor_settings(state.config_path, target.section).value_or(MonitorSettings{});
+            const MonitorSettingsRead settings_read = read_monitor_settings(state.config_path, target.section);
+            state.monitor_settings = settings_read.settings; // good values stay, a rejected key shows its built-in value
+            state.monitor_rejections = make_utf8_lines(settings_read.rejections);
             target.set_keys = read_set_keys(state.config_path, target.section); // own write or reset changes them
+        }
+
+        void load_background_settings(SettingsWindowState& state) {
+            const BackgroundSettingsRead settings_read = read_background_settings(state.config_path);
+            state.background_settings = settings_read.settings;
+            state.background_rejections = make_utf8_lines(settings_read.rejections);
+            state.previewed_background = state.background_settings; // file look: nothing to preview
         }
 
         void load_settings(SettingsWindowState& state) {
             state.config_path = config_path();
             // time first: a save during the read gives a new time, so the next focus reads again
             state.config_write_time = read_config_write_time(state.config_path);
-            state.background_settings = read_background_settings(state.config_path).value_or(BackgroundSettings{});
-            state.previewed_background = state.background_settings; // file look: nothing to preview
+            load_background_settings(state);
             load_monitor_targets(state); // sections can change with the file
             load_target_settings(state); // selection can change with the targets
         }
@@ -429,6 +451,7 @@ namespace ninja {
                 return; // logged; the app keeps the file values
             }
             state.config_write_time = read_config_write_time(state.config_path); // own write: no reload on focus
+            load_background_settings(state); // a fixed value clears its red line
             load_target_settings(state); // key now set in the section
             PostMessageW(state.app_window, config_changed_message, 0, 0);
         }
@@ -648,12 +671,29 @@ namespace ninja {
             }
         }
 
-         // every [default] key
+        // hand-typed values the readers rejected; the app keeps its last good settings
+        void draw_rejections(const SettingsWindowState& state) {
+            const bool has_rejections = !state.background_rejections.empty() || !state.monitor_rejections.empty();
+            if (!has_rejections) {
+                return;
+            }
+            ImGui::PushStyleColor(ImGuiCol_Text, error_text_color);
+            for (const std::string& line : state.background_rejections) {
+                ImGui::TextWrapped("%s", line.c_str());
+            }
+            for (const std::string& line : state.monitor_rejections) {
+                ImGui::TextWrapped("%s", line.c_str());
+            }
+            ImGui::PopStyleColor();
+        }
+
+        // every [default] key
         void draw_settings(SettingsWindowState& state) {
             MonitorSettings& monitor = state.monitor_settings;
             BackgroundSettings& background = state.background_settings;
             ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.5f); // room for label, x and marker
 
+            draw_rejections(state);
             draw_monitor_target_combo(state);
             // copy: restore defaults rebuilds the targets inside this frame
             const std::wstring target = target_selection(state);
