@@ -19,6 +19,12 @@
 - A settings window. Changes apply at once, with no restart.
 - A watchdog process restores the taskbar if the app crashes or freezes.
 
+https://github.com/user-attachments/assets/74c6581f-3d04-4a6a-b0aa-9eba204dcd2e
+
+
+
+
+
 ## Installation
 1. Download the latest release from [releases](https://github.com/sean1832/taskbar-ninja/releases/latest).
 2. Keep `taskbar-ninja.exe` and `taskbar-ninja-explorer.dll` in the same folder.
