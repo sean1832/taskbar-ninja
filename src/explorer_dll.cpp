@@ -15,6 +15,7 @@
 #include <ocidl.h>
 #include <windows.graphics.effects.interop.h>
 #include <xamlOM.h>
+#include <windows.ui.xaml.hosting.desktopwindowxamlsource.h> // IDesktopWindowXamlSourceNative
 
 #include <winrt/base.h>
 #include <winrt/Windows.Foundation.h>
@@ -59,10 +60,21 @@ namespace ninja {
             bool is_stroke = false;             ///< BackgroundStroke, the thin edge line
         };
 
+        /**
+         * One taskbar: the XAML element that holds all of its content, and its window.
+         */
+        struct Taskbar {
+            InstanceHandle frame_handle; ///< XAML diagnostics handle of its TaskbarFrame, the only field valid on remove
+            xaml::UIElement content;     ///< content of the XAML source: icons, tray, clock, background
+            HWND taskbar;                ///< Shell_TrayWnd or Shell_SecondaryTrayWnd
+        };
+
         HMODULE dll_module = nullptr;
 
         // XAML thread only
         std::vector<Background> backgrounds;
+        std::vector<InstanceHandle> source_handles; // every DesktopWindowXamlSource
+        std::vector<Taskbar> bars;
 
         // written on the signal thread and the XAML thread
         std::mutex look_mutex;
@@ -334,6 +346,63 @@ namespace ninja {
             });
         }
 
+        // taskbar window of the XAML source whose content is this element, or nullptr
+        // method from TranslucentTB, see https://github.com/TranslucentTB/TranslucentTB/blob/d4636e439865df0a1a1419db408e055740ce5c74/ExplorerTAP/visualtreewatcher.cpp#L45-L72
+        HWND find_taskbar_of_content(IXamlDiagnostics& diagnostics, const xaml::UIElement& element) {
+            for (InstanceHandle source_handle : source_handles) {
+                try {
+                    winrt::Windows::Foundation::IInspectable object;
+                    winrt::check_hresult(diagnostics.GetIInspectableFromHandle(
+                       source_handle, reinterpret_cast<::IInspectable**>(winrt::put_abi(object))
+                    ));
+                    auto source = object.as<xaml::Hosting::DesktopWindowXamlSource>();
+                    if (source.Content() != element) {
+                        continue;
+                    }
+                    // island window: child window that hosts the XAML. its top parent is the taskbar
+                    // see https://learn.microsoft.com/en-us/windows/win32/api/windows.ui.xaml.hosting.desktopwindowxamlsource/nf-windows-ui-xaml-hosting-desktopwindowxamlsource-idesktopwindowxamlsourcenative-get_windowhandle
+                    HWND island_window = nullptr;
+                    winrt::check_hresult(source.as<IDesktopWindowXamlSourceNative>()->get_WindowHandle(&island_window));
+                    return GetAncestor(island_window, GA_ROOT);
+                }catch (...) {
+                    // a source of another thread or a closed source: not ours
+                }
+            }
+            return nullptr;
+        }
+
+        void add_bar(IXamlDiagnostics& diagnostics, InstanceHandle frame_handle, const xaml::DependencyObject& frame) {
+            // the content is a parent of the frame, but not the top parent
+            xaml::DependencyObject ancestor = xaml::Media::VisualTreeHelper::GetParent(frame);
+            while (ancestor != nullptr) {
+                HWND taskbar = nullptr;
+                auto element = ancestor.try_as<xaml::UIElement>();
+                if (element != nullptr) {
+                    taskbar = find_taskbar_of_content(diagnostics, element);
+                }
+                if (taskbar != nullptr) {
+                    // a new frame for a known taskbar takes its place
+                    std::erase_if(bars, [taskbar](const Taskbar& bar) {
+                        return bar.taskbar == taskbar;
+                    });
+                    bars.push_back(Taskbar{
+                        frame_handle, element, taskbar
+                    });
+                    append_log(LogLevel::info, L"explorer_taskbar_found", {{L"count", std::to_wstring(bars.size())}});
+                    return;
+                }
+                ancestor = xaml::Media::VisualTreeHelper::GetParent(ancestor);
+            }
+            append_log(LogLevel::warning, L"explorer_bar_content_missing");
+        }
+
+        void remove_bar(InstanceHandle handle) {
+            std::erase(source_handles, handle);
+            std::erase_if(bars, [handle](const Taskbar& bar) {
+                return bar.frame_handle == handle;
+            });
+        }
+
         void wait_for_signals() {
             HANDLE apply_event = CreateEventW(nullptr, FALSE, FALSE, explorer_apply_event_name);
             HANDLE restore_event = CreateEventW(nullptr, FALSE, FALSE, explorer_restore_event_name);
@@ -386,8 +455,22 @@ namespace ninja {
                     std::wstring type = take_bstr(element.Type);
                     if (mutation == Remove) {
                         remove_background(element.Handle);
+                        remove_bar(element.Handle);
                         return S_OK;
                     }
+                    if (type == L"Windows.UI.Xaml.Hosting.DesktopWindowXamlSource") {
+                        source_handles.push_back(element.Handle);
+                        return S_OK;
+                    }
+
+                    if (type == L"Taskbar.TaskbarFrame") {
+                        winrt::Windows::Foundation::IInspectable frame;
+                        winrt::check_hresult(diagnostics->GetIInspectableFromHandle(
+                            element.Handle, reinterpret_cast<::IInspectable**>(winrt::put_abi(frame))));
+                        add_bar(*diagnostics, element.Handle, frame.as<xaml::DependencyObject>());
+                        return S_OK;
+                    }
+
                     if (type != L"Windows.UI.Xaml.Shapes.Rectangle") {
                         return S_OK;
                     }
