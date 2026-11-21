@@ -11,19 +11,18 @@
 > Windows 10 may work but not tested or supported.
 
 ## Features
-- Auto-hide per monitor. The taskbar shows when the mouse touches the screen edge, and hides after a delay.
-- The taskbar stays shown while Start, a menu, an app preview, or quick settings is open.
-- Windows can fill the strip the hidden taskbar leaves (`cover_taskbar_area`).
-- Background styles: `original`, `clear`, `tint`, `acrylic`, `blur`. Blur can fade in from the inner edge.
-- Works with the taskbar on any screen edge.
-- A settings window. Changes apply at once, with no restart.
-- A watchdog process restores the taskbar if the app crashes or freezes.
+- **Per-monitor settings.** Each monitor hides and shows on its own. The app keeps a monitor's settings while it is disconnected.
+- **Adjustable timing.** Set the show delay, hide delay, hot zone size, and slide speed.
+- **Stays up when you need it.** The taskbar stays shown while Start, a menu, an app preview, or quick settings is open.
+- **More screen space.** Windows can fill the strip the hidden taskbar leaves.
+- **Background styles.** Original, clear, tint, acrylic, or blur. Blur can fade in from the inner edge.
+- **Any screen edge.** Works with the taskbar on the top, bottom, left, or right.
+- **Live settings window.** Changes apply at once, with no restart.
+- **Safe recovery.** A watchdog restores the taskbar if the app crashes or freezes.
 
-https://github.com/user-attachments/assets/74c6581f-3d04-4a6a-b0aa-9eba204dcd2e
+![](/docs/imgs/taskbar_demo_01.gif)
 
-
-
-
+<img width="300" src="/docs/imgs/taskbar_settings_01.png">
 
 ## Installation
 1. Download the latest release from [releases](https://github.com/sean1832/taskbar-ninja/releases/latest).
@@ -56,49 +55,8 @@ A red line at the top means `config.ini` has a value the app rejected, for examp
 | Settings | Opens the settings window. |
 | Exit | Restores the taskbar and background, then closes the app. |
 
-### Config
-The app writes `%APPDATA%\taskbar-ninja\config.ini` on first start. The settings window edits this file for you. You can also edit it by hand. A hand edit applies when you open the settings window or click back on it, and when the app starts.
-
-```ini
-[default]
-auto_hide = true
-cover_taskbar_area = true
-show_delay_ms = 0
-hide_delay_ms = 300
-hot_zone_pixels = 2
-show_animation_ms = 300
-hide_animation_ms = 300
-background = original
-background_color = 40202020
-background_blur_pixels = 10
-background_feather = true
-background_feather_percent = 50
-```
-
-| Key | Values | Meaning |
-|---|---|---|
-| `auto_hide` | `true`, `false` | Hide the taskbar until the mouse touches the hot zone. |
-| `cover_taskbar_area` | `true`, `false` | Let windows fill the taskbar strip. Needs `auto_hide = true`. |
-| `show_delay_ms` | 0 to 10000 | Time in the hot zone before the taskbar shows. |
-| `hide_delay_ms` | 0 to 10000 | Time away from the taskbar before it hides. |
-| `hot_zone_pixels` | 1 to 50 | Thickness of the strip at the screen edge that shows the taskbar. |
-| `show_animation_ms` | 0 to 2000 | Time the taskbar takes to slide in. 0 = shows at once. |
-| `hide_animation_ms` | 0 to 2000 | Time the taskbar takes to slide out. Starts after `hide_delay_ms`. 0 = hides at once. |
-| `background` | `original`, `clear`, `tint`, `acrylic`, `blur` | Background of every taskbar. |
-| `background_color` | `AARRGGBB` hex | Colour for `tint`, `acrylic` and `blur`. `AA` is the opacity. |
-| `background_blur_pixels` | 1 to 50 | Blur strength. |
-| `background_feather` | `true`, `false` | Fade the blur in from the inner edge. |
-| `background_feather_percent` | 1 to 100 | Part of the bar thickness the fade covers. |
-
-To give one monitor its own settings by hand, add a section named after its model, for example `[DELL U2720Q]`. The settings window makes these sections for you. Keys you leave out come from `[default]`. You can find the model names on the `monitor` lines in `%APPDATA%\taskbar-ninja\log.txt`.
-
-The `background_*` keys apply to every taskbar and only work in `[default]`.
-
-A missing `show_animation_ms` or `hide_animation_ms` means 0, so a config from an older version keeps its instant show and hide.
-
-`acrylic` and `blur` need **Settings > Personalization > Colors > Transparency effects** turned on.
-
-If a value is out of range, the app keeps the last good settings and writes the reason to `log.txt`. The settings window shows the reason in red.
+### Config.ini
+see [Config](docs/Config.md) for the config file and its keys.
 
 ### Command line
 | Command | Action |
