@@ -106,14 +106,6 @@ namespace ninja {
     [[nodiscard]] std::wstring make_color_text(std::uint32_t color_argb);
 
     /**
-     * Starts watching the config folder for written and renamed files.
-     * @param config_path path from write_default_config
-     * @return change handle to wait on, or nullptr when the folder cannot be watched
-     * @remarks Every file in the folder signals, log.txt included. Call FindNextChangeNotification after each signal.
-     */
-    [[nodiscard]] HANDLE start_config_watch(const std::wstring& config_path);
-
-    /**
      * Reads when the config file was last written.
      * @param config_path path from write_default_config
      * @return write time in FILETIME units, or 0 when the file is missing

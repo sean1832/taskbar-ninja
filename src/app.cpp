@@ -40,7 +40,7 @@ namespace ninja {
         constexpr UINT mouse_timer_interval_ms = 50;
 
         constexpr UINT_PTR rebuild_timer_id = 2;
-        // editors save in steps; Explorer makes new taskbars a little after a display change
+        // Explorer makes new taskbars a little after a display change
         constexpr UINT rebuild_delay_ms = 1000;
 
         constexpr UINT_PTR work_area_timer_id = 3;
@@ -76,10 +76,6 @@ namespace ninja {
             // tray pause switch; true = every taskbar shows, original background
             bool paused = false;
             std::wstring config_path;
-            // nullptr = no live reload
-            HANDLE config_watch = nullptr;
-            // last seen write time of the config file; 0 = file missing
-            ULONGLONG config_write_time = 0;
             std::vector<MonitorState> monitors;
             BackgroundSettings background_settings; // background from the config, the last good one
             TaskbarEdge background_edge = TaskbarEdge::bottom; // edge in the last look
@@ -460,7 +456,6 @@ namespace ninja {
             // SetTimer repeats; one rebuild per burst of events
             KillTimer(state.window, rebuild_timer_id);
             rebuild_monitors(state);
-            reload_settings_window(); // hand edit or display change: window shows the file again
         }
 
         // a new change during the delay starts the delay again
@@ -491,31 +486,9 @@ namespace ninja {
             }
         }
 
-        // settings window wrote one key: reload now, not after the rebuild delay
-        void on_settings_commited(AppState& state) {
-            state.config_write_time = read_config_write_time(state.config_path); // folder watch skips this write
+        // settings window wrote a key or found a hand edit: reload now
+        void on_config_changed(AppState& state) {
             rebuild_monitors(state);
-        }
-
-        // any file in the config folder changed, log.txt included
-        void on_config_folder_changed(AppState& state) {
-            // watch again first, so a change during the work below still signals
-            if (!FindNextChangeNotification(state.config_watch)) {
-                // a handle left signalled would wake the loop forever
-                append_log(LogLevel::error, L"config_watch_rejected", {{L"win32_error", std::to_wstring(GetLastError())}});
-                FindCloseChangeNotification(state.config_watch);
-                state.config_watch = nullptr;
-                return;
-            }
-
-            // log lines change the folder too; only a new config write time counts
-            ULONGLONG write_time = read_config_write_time(state.config_path);
-            if (write_time == state.config_write_time) {
-                return;
-            }
-            state.config_write_time = write_time;
-            append_log(LogLevel::info, L"config_changed");
-            start_rebuild_timer(state);
         }
 
         // reads the mouse and the holds, then hides or shows each taskbar
@@ -751,8 +724,8 @@ namespace ninja {
                 apply_animation(*state);
                 apply_background(*state);
                 return 0;
-            case settings_committed_message:
-                on_settings_commited(*state);
+            case config_changed_message:
+                on_config_changed(*state);
                 return 0;
             case WM_TIMER:
                 if (wparam == mouse_timer_id) {
@@ -851,9 +824,6 @@ namespace ninja {
         AppState state;
         state.config_path = write_default_config();
         state.monitors = build_monitor_states(state.config_path, {});
-        // watch first, then read the time, so a save between the two still signals
-        state.config_watch = start_config_watch(state.config_path);
-        state.config_write_time = read_config_write_time(state.config_path);
 
         state.taskbar_created_message = RegisterWindowMessageW(L"TaskbarCreated");
         if (state.taskbar_created_message == 0) {
@@ -883,19 +853,13 @@ namespace ninja {
         apply_background(state);
 
         for (;;) {
-            // missing handles are left out, so the list has no gaps
-            HANDLE handles[2] = {};
+            // no watchdog: messages only
             DWORD handle_count = 0;
-            if (state.config_watch != nullptr) {
-                handles[handle_count] = state.config_watch;
-                handle_count += 1;
-            }
             if (state.watchdog_process != nullptr) {
-                handles[handle_count] = state.watchdog_process;
-                handle_count += 1;
+                handle_count = 1;
             }
 
-            DWORD wait = MsgWaitForMultipleObjectsEx(handle_count, handles, INFINITE, QS_ALLINPUT,
+            DWORD wait = MsgWaitForMultipleObjectsEx(handle_count, &state.watchdog_process, INFINITE, QS_ALLINPUT,
                 MWMO_INPUTAVAILABLE);
             if (wait == WAIT_FAILED) {
                 append_log(LogLevel::error, L"app_wait_rejected", {{L"win32_error", std::to_wstring(GetLastError())}});
@@ -911,20 +875,12 @@ namespace ninja {
                 continue;
             }
 
-            HANDLE signalled = handles[wait - WAIT_OBJECT_0];
-            if (signalled == state.config_watch) {
-                on_config_folder_changed(state);
-                continue;
-            }
             on_watchdog_ended(state);
         }
 
         // the watchdog sees the app end, restores and exits by itself
         if (state.watchdog_process != nullptr) {
             CloseHandle(state.watchdog_process);
-        }
-        if (state.config_watch != nullptr) {
-            FindCloseChangeNotification(state.config_watch);
         }
         append_log(LogLevel::info, L"exit");
         CloseHandle(mutex);

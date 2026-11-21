@@ -45,11 +45,8 @@ namespace ninja {
         // imgui shows some results on frame late
         constexpr int extra_frames_after_input = 2;
 
-        // reload_settings_window to the window itself
-        constexpr UINT settings_reload_message = WM_APP + 1;
-
         // "Open config file" button; ShellExecuteW runs a message loop, so never inside a frame
-        constexpr UINT open_config_message = WM_APP + 2;
+        constexpr UINT open_config_message = WM_APP + 1;
 
         // gpu first, then cpu renderer
         struct DriverChoice {
@@ -67,8 +64,9 @@ namespace ninja {
          */
         struct SettingsWindowState {
             HWND window = nullptr; // this settings window
-            HWND app_window = nullptr; // gets settings_committed_message
+            HWND app_window = nullptr; // gets config_changed_message
             std::wstring config_path;
+            ULONGLONG config_write_time = 0; // file write time the settings below match; 0 = file missing
             MonitorSettings monitor_settings; // [default] keys as the file has them
             BackgroundSettings background_settings; // background keys as the file has them
             ComPtr<ID3D11Device> device;
@@ -189,13 +187,27 @@ namespace ninja {
 
         void load_settings(SettingsWindowState& state) {
             state.config_path = config_path();
+            // time first: a save during the read gives a new time, so the next focus reads again
+            state.config_write_time = read_config_write_time(state.config_path);
             // empty model name: [default] only
             state.monitor_settings = read_monitor_settings(state.config_path, L"").value_or(MonitorSettings{});
             state.background_settings = read_background_settings(state.config_path).value_or(BackgroundSettings{});
         }
 
+        // a hand edit since the last read: show the file, and the app reloads too
+        void reload_changed_settings(SettingsWindowState& state) {
+            if (read_config_write_time(state.config_path) == state.config_write_time) {
+                return;
+            }
+            load_settings(state);
+            append_log(LogLevel::info, L"config_changed");
+            PostMessageW(state.app_window, config_changed_message, 0, 0);
+        }
+
         bool on_create(HWND window, SettingsWindowState& state) {
             load_settings(state);
+            // hand edits made while the window was closed
+            PostMessageW(state.app_window, config_changed_message, 0, 0);
             if (!create_device(window, state)) {
                 return false;
             }
@@ -252,21 +264,22 @@ namespace ninja {
         }
 
         // writes one [default] key, then the app reloads after this frame
-        void commit_value(const SettingsWindowState& state, const wchar_t* key, const std::wstring& value) {
+        void commit_value(SettingsWindowState& state, const wchar_t* key, const std::wstring& value) {
             if (!write_config_value(state.config_path, default_section, key, value)) {
                 return; // logged; the app keeps the file values
             }
-            PostMessageW(state.app_window, settings_committed_message, 0, 0);
+            state.config_write_time = read_config_write_time(state.config_path); // own write: no reload on focus
+            PostMessageW(state.app_window, config_changed_message, 0, 0);
         }
 
-        void draw_checkbox(const SettingsWindowState& state, const char* label, const wchar_t* key, bool& value) {
+        void draw_checkbox(SettingsWindowState& state, const char* label, const wchar_t* key, bool& value) {
             if (ImGui::Checkbox(label, &value)) {
                 commit_value(state, key, make_bool_text(value));
             }
         }
 
         // clamped to the config range, so the window never writes a rejected value
-        void draw_int_slider(const SettingsWindowState& state, const char* label, const wchar_t* key, int& value,
+        void draw_int_slider(SettingsWindowState& state, const char* label, const wchar_t* key, int& value,
             IntRange range, const char* format) {
             ImGui::SliderInt(label, &value, range.min, range.max, format, ImGuiSliderFlags_AlwaysClamp);
             if (ImGui::IsItemDeactivatedAfterEdit()) {
@@ -463,10 +476,12 @@ namespace ninja {
                 }
                 return 0;
             }
-            case settings_reload_message:
-                load_settings(*state);
-                request_frames(window, *state);
-                return 0;
+            case WM_ACTIVATE:
+                if (LOWORD(wparam) != WA_INACTIVE) {
+                    reload_changed_settings(*state); // back from the editor
+                    request_frames(window, *state);
+                }
+                return DefWindowProcW(window, message, wparam, lparam); // sets the keyboard focus
             case open_config_message:
                 open_config_file(*state);
                 return 0;
@@ -552,13 +567,5 @@ namespace ninja {
         ShowWindow(window, SW_SHOW);
         SetForegroundWindow(window);
         append_log(LogLevel::info, L"settings_window_opened", {{L"dpi", std::to_wstring(dpi)}});
-    }
-
-    void reload_settings_window() {
-        HWND window = FindWindowW(settings_window_class, nullptr);
-        if (window == nullptr) {
-            return; // closed: the next open reads the file
-        }
-        PostMessageW(window, settings_reload_message, 0, 0);
     }
 } // namespace ninja
