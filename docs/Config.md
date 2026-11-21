@@ -1,6 +1,6 @@
 ﻿# Config
 
-The app writes `%APPDATA%\taskbar-ninja\config.ini` on first start. The settings window edits this file for you. You can also edit it by hand. A hand edit applies when you open the settings window or click back on it, and when the app starts.
+The app writes `%APPDATA%\taskbar-ninja\config.ini` on first start. The settings window edits this file for you. You can also edit it manually. A manual edit applies when you open the settings window or click back on it, and when the app starts.
 
 ```ini
 [default]
@@ -18,7 +18,7 @@ background_feather = true
 background_feather_percent = 50
 ```
 
-| Key | Values | Meaning |
+| Key | Values | Description |
 |---|---|---|
 | `auto_hide` | `true`, `false` | Hide the taskbar until the mouse touches the hot zone. |
 | `cover_taskbar_area` | `true`, `false` | Let windows fill the taskbar strip. Needs `auto_hide = true`. |
@@ -33,7 +33,7 @@ background_feather_percent = 50
 | `background_feather` | `true`, `false` | Fade the blur in from the inner edge. |
 | `background_feather_percent` | 1 to 100 | Part of the bar thickness the fade covers. |
 
-To give one monitor its own settings by hand, add a section named after its model, for example `[DELL U2720Q]`. The settings window makes these sections for you. Keys you leave out come from `[default]`. You can find the model names on the `monitor` lines in `%APPDATA%\taskbar-ninja\log.txt`.
+To give one monitor its own settings manually, add a section named after its model, for example `[DELL U2720Q]`. The settings window makes these sections for you. Keys you leave out come from `[default]`. You can find the model names on the `monitor` lines in `%APPDATA%\taskbar-ninja\log.txt`.
 
 The `background_*` keys apply to every taskbar and only work in `[default]`.
 
@@ -41,4 +41,4 @@ A missing `show_animation_ms` or `hide_animation_ms` means 0, so a config from a
 
 `acrylic` and `blur` need **Settings > Personalization > Colors > Transparency effects** turned on.
 
-If a value is out of range, the app keeps the last good settings and writes the reason to `log.txt`. The settings window shows the reason in red.
+If a value is out of range, the app keeps the last valid settings and writes the reason to `log.txt`. The settings window shows the reason in red.
