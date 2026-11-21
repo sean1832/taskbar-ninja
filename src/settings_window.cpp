@@ -272,6 +272,14 @@ namespace ninja {
             PostMessageW(state.app_window, config_changed_message, 0, 0);
         }
 
+        void restore_default(SettingsWindowState& state) {
+            if (!restore_default_config(state.config_path)) {
+                return; // failed. logged. window kept the old values
+            }
+            load_settings(state); // also stores the new write time. no reload on focus
+            PostMessageW(state.app_window, config_changed_message, 0, 0);
+        }
+
         void draw_checkbox(SettingsWindowState& state, const char* label, const wchar_t* key, bool& value) {
             if (ImGui::Checkbox(label, &value)) {
                 commit_value(state, key, make_bool_text(value));
@@ -322,6 +330,30 @@ namespace ninja {
             }
         }
 
+        void draw_restore_defaults(SettingsWindowState& state) {
+            constexpr char popup_name[] = "Restore defaults?"; // OpenPopup and BeginPopupModal need same id
+            if (ImGui::Button("Restore Default")) {
+                ImGui::OpenPopup(popup_name);
+            }
+
+            // centre of the window, set once when it opens
+            ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+            if (!ImGui::BeginPopupModal(popup_name, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+                return; // popup closed
+            }
+            ImGui::TextUnformatted("config.ini restored default values.");
+            ImGui::Spacing();
+            if (ImGui::Button("Restore")) {
+                restore_default(state);
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel")) {
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
+
          // every [default] key
         void draw_settings(SettingsWindowState& state) {
             MonitorSettings& monitor = state.monitor_settings;
@@ -354,6 +386,8 @@ namespace ninja {
             if (ImGui::Button("Open config file")) {
                 PostMessageW(state.window, open_config_message,0, 0); // runs after this frame
             }
+            ImGui::SameLine();
+            draw_restore_defaults(state);
         }
 
         void open_config_file(const SettingsWindowState& state) {

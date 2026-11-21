@@ -67,6 +67,14 @@ namespace ninja {
     [[nodiscard]] std::wstring write_default_config();
 
     /**
+     * Replaces config.ini with the default settings and keeps the old file as config.ini.bak.
+     * @param config_path path from write_default_config
+     * @return true when config.ini has the default text
+     * @remarks Removes monitor sections and hand comments too. Logs one line.
+     */
+    [[nodiscard]] bool restore_default_config(const std::wstring& config_path);
+
+    /**
      * Reads the settings of one monitor from its own section, then from [default], then from the built-in values.
      * @param config_path path from write_default_config
      * @param model_name monitor model name, which is also its section name

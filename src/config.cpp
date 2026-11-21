@@ -177,6 +177,30 @@ namespace ninja {
         return path;
     }
 
+    bool restore_default_config(const std::wstring& config_path) {
+        if (config_path.empty()) {
+            return false; // empty path
+        }
+
+        const std::wstring backup_path = config_path + L".bak";
+        // REPLACE EXISTING: only single backup is kept
+        if (!MoveFileExW(config_path.c_str(), backup_path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+            DWORD err = GetLastError();
+            if (err != ERROR_FILE_NOT_FOUND) {
+                append_log(LogLevel::error, L"config_not_restored",{
+                    {L"win32_error", std::to_wstring(err)}
+                });
+                return false; // file locked or no access. unchanged
+            }
+        }
+        const std::wstring written_path = write_default_config();
+        if (read_config_write_time(written_path) == 0) {
+            return false; // no file after write
+        }
+        append_log(LogLevel::info, L"config_written", {{L"backup", backup_path}});
+        return true;
+    }
+
     std::optional<MonitorSettings> read_monitor_settings(const std::wstring& config_path, const std::wstring& model_name) {
         MonitorSettings default_settings;
         // no file path: an empty path makes windows read from its own folder
