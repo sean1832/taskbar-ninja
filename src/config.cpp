@@ -1,5 +1,6 @@
 ﻿#include "config.h"
 
+#include <complex.h>
 #include <windows.h>
 
 #include <cstdint>
@@ -14,20 +15,7 @@
 
 namespace ninja {
     namespace {
-        constexpr wchar_t default_section[] = L"default";
         constexpr DWORD max_value_characters = 64;
-
-        constexpr int min_delay_ms = 0;
-        constexpr int max_delay_ms = 10000;
-        constexpr int min_hot_zone_pixels = 1;
-        constexpr int max_hot_zone_pixels = 50;
-        constexpr int min_animation_ms = 0;
-        constexpr int max_animation_ms = 2000;
-
-        constexpr int min_blur_pixels = 1;
-        constexpr int max_blur_pixels = 50;
-        constexpr int min_feather_percent = 1;
-        constexpr int max_feather_percent = 100;
 
         // ASCII only: the profile API reads ASCII and UTF-8 files the same way
         constexpr char default_config_text[] =
@@ -96,7 +84,7 @@ namespace ninja {
             return fallback;
         }
 
-        int read_int(SettingsSource& source, const wchar_t* key, int min, int max, int fallback) {
+        int read_int(SettingsSource& source, const wchar_t* key, IntRange range, int fallback) {
             std::wstring text = read_text(source, key);
             if (text.empty()) {
                 return fallback;
@@ -106,13 +94,13 @@ namespace ninja {
             // too big: wcstol gives LONG_MAX, which the range check rejects
             long number = std::wcstol(text.c_str(), &end, 10);
             bool is_whole_number = end != text.c_str() && *end == L'\0';
-            bool is_in_range = number >= min && number <= max;
+            bool is_in_range = number >= range.min && number <= range.max;
             if (is_whole_number && is_in_range) {
                 return static_cast<int>(number);
             }
 
-            reject_value(source, std::wstring(key) + L" must be a whole number in [" + std::to_wstring(min) +
-                L", " + std::to_wstring(max) + L"]");
+            reject_value(source, std::wstring(key) + L" must be a whole number in [" + std::to_wstring(range.min) +
+                L", " + std::to_wstring(range.max) + L"]");
             return fallback;
         }
 
@@ -200,11 +188,11 @@ namespace ninja {
         MonitorSettings settings;
         settings.auto_hide = read_bool(source, L"auto_hide", default_settings.auto_hide);
         settings.cover_taskbar_area = read_bool(source, L"cover_taskbar_area", default_settings.cover_taskbar_area);
-        settings.show_delay_ms = read_int(source, L"show_delay_ms", min_delay_ms, max_delay_ms, default_settings.show_delay_ms);
-        settings.hide_delay_ms = read_int(source, L"hide_delay_ms", min_delay_ms, max_delay_ms, default_settings.hide_delay_ms);
-        settings.hot_zone_pixels = read_int(source, L"hot_zone_pixels", min_hot_zone_pixels, max_hot_zone_pixels, default_settings.hot_zone_pixels);
-        settings.show_animation_ms = read_int(source, L"show_animation_ms", min_animation_ms, max_animation_ms, default_settings.show_animation_ms);
-        settings.hide_animation_ms = read_int(source, L"hide_animation_ms", min_animation_ms, max_animation_ms, default_settings.hide_animation_ms);
+        settings.show_delay_ms = read_int(source, L"show_delay_ms", delay_ms_range, default_settings.show_delay_ms);
+        settings.hide_delay_ms = read_int(source, L"hide_delay_ms", delay_ms_range, default_settings.hide_delay_ms);
+        settings.hot_zone_pixels = read_int(source, L"hot_zone_pixels", hot_zone_pixels_range, default_settings.hot_zone_pixels);
+        settings.show_animation_ms = read_int(source, L"show_animation_ms", animation_ms_range, default_settings.show_animation_ms);
+        settings.hide_animation_ms = read_int(source, L"hide_animation_ms", animation_ms_range, default_settings.hide_animation_ms);
 
         if (source.has_rejected_value) {
             return std::nullopt;
@@ -225,14 +213,43 @@ namespace ninja {
         BackgroundSettings settings;
         settings.style = read_style(source, L"background", default_settings.style);
         settings.color_argb = read_color(source, L"background_color", default_settings.color_argb);
-        settings.blur_pixels = read_int(source, L"background_blur_pixels", min_blur_pixels, max_blur_pixels, default_settings.blur_pixels);
+        settings.blur_pixels = read_int(source, L"background_blur_pixels", blur_pixels_range, default_settings.blur_pixels);
         settings.feather = read_bool(source, L"background_feather", default_settings.feather);
-        settings.feather_percent = read_int(source, L"background_feather_percent", min_feather_percent, max_feather_percent, default_settings.feather_percent);
+        settings.feather_percent = read_int(source, L"background_feather_percent", feather_percent_range, default_settings.feather_percent);
 
         if (source.has_rejected_value) {
             return std::nullopt;
         }
         return settings;
+    }
+
+    bool write_config_value(const std::wstring& config_path, const wchar_t* section, const wchar_t* key, const std::wstring& value) {
+        if (config_path.empty()) {
+            return false; // empty path
+        }
+
+        if (!WritePrivateProfileStringW(section, key, value.c_str(), config_path.c_str())) {
+            append_log(LogLevel::error, L"config_value_not_written", {
+                {L"key", key},
+                {L"win32_error", std::to_wstring(GetLastError())}
+            });
+            return false;
+        }
+        return true;
+    }
+
+    std::wstring make_bool_text(bool value) {
+        if (value) {
+            return L"true";
+        }
+        return L"false";
+    }
+
+    // same format read_color accept
+    std::wstring make_color_text(std::uint32_t color_argb) {
+        wchar_t text[9] = {}; // 8 digit and the null
+        std::swprintf(text, 9, L"%08X", static_cast<unsigned int>(color_argb)); // convert hex
+        return text;
     }
 
     HANDLE start_config_watch(const std::wstring& config_path) {

@@ -461,6 +461,7 @@ namespace ninja {
             // SetTimer repeats; one rebuild per burst of events
             KillTimer(state.window, rebuild_timer_id);
             rebuild_monitors(state);
+            reload_settings_window(); // hand edit or display change: window shows the file again
         }
 
         // a new change during the delay starts the delay again
@@ -489,6 +490,12 @@ namespace ninja {
                 apply_animation(state); // update animation with new edge
                 apply_background(state); // update background with new edge
             }
+        }
+
+        // settings window wrote one key: reload now, not after the rebuild delay
+        void on_settings_commited(AppState& state) {
+            state.config_write_time = read_config_write_time(state.config_path); // folder watch skips this write
+            rebuild_monitors(state);
         }
 
         // any file in the config folder changed, log.txt included
@@ -691,7 +698,7 @@ namespace ninja {
                 apply_background(state);
                 return;
             case TrayCommand::open_settings:
-                open_settings_window();
+                open_settings_window(state.window);
                 return;
             case TrayCommand::open_config_file: {
                 INT_PTR result = 0;
@@ -751,6 +758,9 @@ namespace ninja {
             case explorer_ready_message:
                 apply_animation(*state);
                 apply_background(*state);
+                return 0;
+            case settings_committed_message:
+                on_settings_commited(*state);
                 return 0;
             case WM_TIMER:
                 if (wparam == mouse_timer_id) {

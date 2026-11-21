@@ -37,6 +37,23 @@ namespace ninja {
     };
 
     /**
+     * Closed range of whole numbers that one config key accepts.
+     */
+    struct IntRange {
+        int min;
+        int max;
+    };
+
+    inline constexpr IntRange delay_ms_range = {0, 10000};      ///< show/hide delay in milliseconds
+    inline constexpr IntRange hot_zone_pixels_range = {1, 50};  ///< hot zone pixels
+    inline constexpr IntRange animation_ms_range = {0, 2000};   ///< show/hide animation in milliseconds
+    inline constexpr IntRange blur_pixels_range = {1, 50};      ///< background blur pixels
+    inline constexpr IntRange feather_percent_range = {1, 100}; ///< background feather percentage
+
+    /// section every monitor reads after its own
+    inline constexpr wchar_t default_section[] = L"default";
+
+    /**
      * Get the config.ini path in appdata folder
      * @return config.ini path
      */
@@ -65,6 +82,28 @@ namespace ninja {
      * @remarks One look for every taskbar. A monitor section does not override it. Logs one line for each rejected value.
      */
     [[nodiscard]] std::optional<BackgroundSettings> read_background_settings(const std::wstring& config_path);
+
+    /**
+     * Writes one key into one section of config.ini and keeps every other line.
+     * @param config_path path from write_default_config
+     * @param section default_section or a monitor model name
+     * @param key key name
+     * @param value value text in the file format
+     * @return true when the file has the new value
+     * @remarks Writes key=value with no spaces. Logs one line when the write is refused.
+     */
+    [[nodiscard]] bool write_config_value(const std::wstring& config_path, const wchar_t* section, const wchar_t* key,
+        const std::wstring& value);
+
+    /**
+     * Makes the config text of a bool, "true" or "false".
+     */
+    [[nodiscard]] std::wstring make_bool_text(bool value);
+
+    /**
+     * Makes the config text of a color, 8 hex digits AARRGGBB.
+     */
+    [[nodiscard]] std::wstring make_color_text(std::uint32_t color_argb);
 
     /**
      * Starts watching the config folder for written and renamed files.

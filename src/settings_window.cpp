@@ -12,6 +12,7 @@
 #include "backends/imgui_impl_dx11.h"
 #include "backends/imgui_impl_win32.h"
 
+#include "config.h"
 #include "log.h"
 
 // imgui leaves it out of its header, so the header needs no windows.h
@@ -39,6 +40,9 @@ namespace ninja {
         // imgui shows some results on frame late
         constexpr int extra_frames_after_input = 2;
 
+        // reload_settings_window to the window itself
+        constexpr UINT settings_reload_message = WM_APP + 1;
+
         // gpu first, then cpu renderer
         struct DriverChoice {
             D3D_DRIVER_TYPE type;
@@ -54,6 +58,10 @@ namespace ninja {
          * @remarks Made on WM_NCCREATE, deleted on WM_NCDESTROY. The window holds a pointer to it.
          */
         struct SettingsWindowState {
+            HWND app_window = nullptr; // gets settings_commited_message
+            std::wstring config_path;
+            MonitorSettings monitor_settings; // [default] keys as the file has them
+            BackgroundSettings background_settings; // background key as the file has them
             ComPtr<ID3D11Device> device;
             ComPtr<ID3D11DeviceContext> device_context;
             ComPtr<IDXGISwapChain> swap_chain;
@@ -170,7 +178,15 @@ namespace ninja {
             return true;
         }
 
+        void load_settings(SettingsWindowState& state) {
+            state.config_path = config_path();
+            // empty model name: [default] only
+            state.monitor_settings = read_monitor_settings(state.config_path, L"").value_or(MonitorSettings{});
+            state.background_settings = read_background_settings(state.config_path).value_or(BackgroundSettings{});
+        }
+
         bool on_create(HWND window, SettingsWindowState& state) {
+            load_settings(state);
             if (!create_device(window, state)) {
                 return false;
             }
@@ -251,8 +267,10 @@ namespace ninja {
 
         LRESULT CALLBACK settings_window_procedure(HWND window, UINT message, WPARAM wparam, LPARAM lparam) {
             if (message == WM_NCCREATE) {
-                // owned by the window, deleted on WM_NCDESTROY
-                SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(new SettingsWindowState()));
+                const auto* create = reinterpret_cast<const CREATESTRUCTW*>(lparam);
+                auto* state = new SettingsWindowState(); // owned by the window, deleted on WM_NCDESTROY
+                state->app_window = static_cast<HWND>(create->lpCreateParams); // from open_settings_window
+                SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(state));
                 return DefWindowProcW(window, message, wparam, lparam);
             }
 
@@ -310,6 +328,10 @@ namespace ninja {
                 }
                 return 0;
             }
+            case settings_reload_message:
+                load_settings(*state);
+                request_frames(window, *state);
+                return 0;
             case WM_DESTROY:
                 on_destroy(*state);
                 append_log(LogLevel::info, L"settings_window_closed");
@@ -339,7 +361,7 @@ namespace ninja {
         }
     } // namespace
 
-    void open_settings_window() {
+    void open_settings_window(HWND app_window) {
         HWND existing = FindWindowW(settings_window_class, nullptr);
         if (existing != nullptr) {
             if (IsIconic(existing)) {
@@ -369,7 +391,7 @@ namespace ninja {
         // hidden on that monitor first, so the window takes the dpi of that monitor
         HWND window = CreateWindowExW(0, settings_window_class, settings_window_title, window_style,
             work_area.left, work_area.top, client_width_at_96_dpi, client_height_at_96_dpi,
-            nullptr, nullptr, instance, nullptr);
+            nullptr, nullptr, instance, app_window); // lpCreateParams, read on WM_NCCREATE
         if (window == nullptr) {
             append_log(LogLevel::error, L"settings_window_rejected", {
                 {L"step", L"window"},
@@ -392,5 +414,13 @@ namespace ninja {
         ShowWindow(window, SW_SHOW);
         SetForegroundWindow(window);
         append_log(LogLevel::info, L"settings_window_opened", {{L"dpi", std::to_wstring(dpi)}});
+    }
+
+    void reload_settings_window() {
+        HWND window = FindWindowW(settings_window_class, nullptr);
+        if (window == nullptr) {
+            return; // closed: the next open reads the file
+        }
+        PostMessageW(window, settings_reload_message, 0, 0);
     }
 } // namespace ninja
