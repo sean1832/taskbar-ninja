@@ -268,6 +268,12 @@ namespace ninja {
                 target.has_primary = target.has_primary || monitor.is_primary;
             }
 
+            // primary screen right after 'All', other keep windows order
+            std::stable_partition(targets.begin() + 1, targets.end(),
+                [](const SettingsTarget& target) {
+                    return target.has_primary;
+                });
+
             for (const std::wstring& section : sections) {
                 if (!find_target(targets, section).has_value()) {
                     targets.push_back({section}); // monitor_count 0: not connected
