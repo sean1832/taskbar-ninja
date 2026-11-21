@@ -76,6 +76,7 @@ namespace ninja {
             int monitor_count = 0; // connected monitors with this model name; 0 = not connected
             bool has_primary = false; // one of them is the main monitor
             std::string label; // dropdown text, UTF-8
+            std::vector<const wchar_t*> set_keys; // monitor_keys this section sets; empty for All monitors
         };
 
         /**
@@ -88,7 +89,6 @@ namespace ninja {
             std::wstring config_path;
             ULONGLONG config_write_time = 0; // file write time the settings below match; 0 = file missing
             MonitorSettings monitor_settings; // values the selected target uses: its section, then [default]
-            std::vector<const wchar_t*> set_keys; // monitor_keys the selected section sets; empty for All monitors
             BackgroundSettings background_settings; // background keys as the file has them
             BackgroundSettings previewed_background; // last look sent to the app; a difference sends a preview
             std::vector<SettingsTarget> targets; // [0] = All monitors, then connected, then not connected
@@ -286,6 +286,30 @@ namespace ninja {
             return targets;
         }
 
+        // monitor_keys the section sets; none for [default], the base
+        std::vector<const wchar_t*> read_set_keys(const std::wstring& config_path, const std::wstring& section) {
+            std::vector<const wchar_t*> set_keys;
+            if (section.empty()) {
+                return set_keys; // All monitors: nothing inherits
+            }
+            for (const wchar_t* key : monitor_keys) {
+                if (has_config_value(config_path, section.c_str(), key)) {
+                    set_keys.push_back(key);
+                }
+            }
+            return set_keys;
+        }
+
+        // wcscmp, not ==: callers pass their own literals, not monitor_keys pointers
+        bool has_key(const SettingsTarget& target, const wchar_t* key) {
+            for (const wchar_t* set_key : target.set_keys) {
+                if (std::wcscmp(set_key, key) == 0) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         // one monitor and no sections: All monitors is the only target that does something
         bool should_show_targets(const SettingsWindowState& state) {
             return state.targets.size() > 2 || state.has_monitor_sections;
@@ -300,6 +324,9 @@ namespace ninja {
             const std::vector<Monitor> monitors = build_monitor_list();
             const std::vector<std::wstring> sections = read_monitor_sections(state.config_path);
             state.targets = build_targets(monitors, sections);
+            for (SettingsTarget& target : state.targets) {
+                target.set_keys = read_set_keys(state.config_path, target.section); // marker needs every section
+            }
             state.has_monitor_sections = !sections.empty();
             state.unnamed_monitor_count = 0;
             for (const Monitor& monitor : monitors) {
@@ -323,18 +350,9 @@ namespace ninja {
         }
 
         void load_target_settings(SettingsWindowState& state) {
-            const std::wstring& section = state.targets[state.target_index].section; // empty: [default] only
-            state.monitor_settings = read_monitor_settings(state.config_path, section).value_or(MonitorSettings{});
-            state.set_keys.clear();
-            if (section.empty()) {
-                return; // All monitors: [default] is the base, nothing inherits
-            }
-
-            for (const wchar_t* key: monitor_keys) {
-                if (has_config_value(state.config_path, section.c_str(), key)) {
-                    state.set_keys.push_back(key);
-                }
-            }
+            SettingsTarget& target = state.targets[state.target_index];
+            state.monitor_settings = read_monitor_settings(state.config_path, target.section).value_or(MonitorSettings{});
+            target.set_keys = read_set_keys(state.config_path, target.section); // own write or reset changes them
         }
 
         void load_settings(SettingsWindowState& state) {
@@ -430,12 +448,7 @@ namespace ninja {
             if (_wcsicmp(section, default_section) == 0) {
                 return false; // [default] is the base
             }
-            for (const wchar_t* set_key : state.set_keys) {
-                if (std::wcscmp(set_key, key) == 0) {
-                    return false;
-                }
-            }
-            return true;
+            return !has_key(state.targets[state.target_index], key);
         }
 
         // x next to a key the monitor section sets
@@ -451,6 +464,40 @@ namespace ninja {
             }
             ImGui::SetItemTooltip("Use the All monitors value");
             ImGui::PopID();
+        }
+
+        // on All monitors: which monitor sections keep their own value for the key
+        void draw_override_marker(const SettingsWindowState& state, const wchar_t* section, const wchar_t* key) {
+            if (_wcsicmp(section, default_section) != 0) {
+                return; // only All monitors edits [default]
+            }
+            int override_count = 0;
+            for (const SettingsTarget& target : state.targets) {
+                if (has_key(target, key)) {
+                    override_count += 1;
+                }
+            }
+            if (override_count == 0) {
+                return; // background keys land here too: never in a section
+            }
+
+            ImGui::SameLine();
+            ImGui::TextDisabled("(set on %d)", override_count);
+            if (!ImGui::BeginItemTooltip()) {
+                return;
+            }
+            ImGui::TextUnformatted("These keep their own value:");
+            for (const SettingsTarget& target : state.targets) {
+                if (!has_key(target, key)) {
+                    continue;
+                }
+                if (target.monitor_count == 0) {
+                    ImGui::BulletText("%s (not connected)", target.label.c_str());
+                } else {
+                    ImGui::BulletText("%s", target.label.c_str());
+                }
+            }
+            ImGui::EndTooltip();
         }
 
         void restore_default(SettingsWindowState& state) {
@@ -475,6 +522,7 @@ namespace ninja {
                 commit_value(state, section, key, make_bool_text(value));
             }
             draw_reset_button(state, section, key, is_inherited);
+            draw_override_marker(state, section, key);
         }
 
         // clamped to the config range, so the window never writes a rejected value
@@ -492,6 +540,7 @@ namespace ninja {
                 commit_value(state, section, key, std::to_wstring(value));
             }
             draw_reset_button(state, section, key, is_inherited);
+            draw_override_marker(state, section, key);
         }
 
         void draw_style_combo(SettingsWindowState& state) {
@@ -603,6 +652,7 @@ namespace ninja {
         void draw_settings(SettingsWindowState& state) {
             MonitorSettings& monitor = state.monitor_settings;
             BackgroundSettings& background = state.background_settings;
+            ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.5f); // room for label, x and marker
 
             draw_monitor_target_combo(state);
             // copy: restore defaults rebuilds the targets inside this frame
@@ -655,6 +705,7 @@ namespace ninja {
                 // same thread: direct call, pumps no messages, so safe inside the frame
                 SendMessageW(state.app_window, settings_preview_message, 0, reinterpret_cast<LPARAM>(&background));
             }
+            ImGui::PopItemWidth();
         }
 
         void open_config_file(const SettingsWindowState& state) {
